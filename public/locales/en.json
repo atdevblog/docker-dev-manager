@@ -1,0 +1,214 @@
+{
+  "app": {"title": "Docker Dev Manager"},
+  "lang": {"label": "Language"},
+  "nav": {"workspace": "WORKSPACE", "projects": "Projects", "resources": "Resources", "ports": "Ports", "disk": "Disk"},
+  "sidebar": {"local": "Runs exclusively on your Mac"},
+  "engine": {
+    "checking": "Checking Docker...", "checkingShort": "Checking", "local": "Local connection",
+    "online": "Online", "offline": "Offline", "version": "Docker {version}", "startDesktop": "Start Docker Desktop",
+    "onlineLabel": "Docker engine online", "offlineLabel": "Docker engine offline",
+    "offlineAlert": "Unable to connect to Docker Engine. Start Docker Desktop; registered projects are still listed.",
+    "offlineAlertDetail": "Unable to connect to Docker Engine ({detail}). Start Docker Desktop; registered projects are still listed."
+  },
+  "header": {"eyebrow": "LOCAL DEVELOPMENT / CONTROL CENTER", "title": "Development workspace", "subtitle": "Discover, inspect and control local Compose workspaces.", "refresh": "Refresh", "addManually": "Add manually"},
+  "metric": {
+    "totalProjects": "Total projects", "totalSub": "Managed + discovered", "runningProjects": "Running projects", "runningSub": "With active containers",
+    "containersRunning": {"one": "{count} container running", "other": "{count} containers running"},
+    "dockerContainers": "Docker containers", "dockerVm": "Docker Desktop VM", "thisMac": "This Mac", "memoryUsed": "Memory used", "engine": "Docker engine",
+    "ram": "RAM {size}", "ofVm": "of {total} Docker VM ({pct}%)", "cpuCores": "CPU {used} of {total} cores",
+    "ofHost": "of {total}", "swap": "swap {size}", "hostCpu": "CPU {pct}% ({used} of {total} cores)", "pressure": "memory pressure {level}",
+    "hostUnavailable": "Host metrics unavailable",
+    "hostTitle": "Memory used as in Activity Monitor (app + wired + compressed), plus {cache} file cache. CPU averaged over the last {window}s.",
+    "hostPressureTitle": "Memory pressure is {level}: macOS is compressing and swapping. Stopping projects or lowering the Docker Desktop memory limit (Settings → Resources) frees RAM."
+  },
+  "pressure": {"normal": "normal", "warning": "warning", "critical": "critical"},
+  "projects": {
+    "heading": "Compose projects", "subtitle": "Start, stop and read logs of any detected stack, without importing or moving source code.",
+    "search": "Search projects...", "scan": "Scan Docker",
+    "noMatchesTitle": "No matches in this view", "noMatchesHint": "Try a different filter or search.",
+    "emptyTitle": "No projects found", "emptyHint": "Click Scan Docker to discover projects or add a Compose folder manually."
+  },
+  "filter": {"all": "All", "running": "Running", "issues": "Needs attention", "managed": "Managed", "discovered": "Discovered"},
+  "status": {"running": "Running", "partial": "Partly running", "stopped": "Stopped", "error": "Error", "unknown": "Unknown"},
+  "dockerState": {"running": "running", "exited": "exited", "created": "created", "restarting": "restarting", "paused": "paused", "dead": "dead", "removing": "removing"},
+  "card": {
+    "managed": "Managed", "discovered": "Discovered", "runningOf": "{running} / {total} running",
+    "sources": {"one": "{count} source", "other": "{count} sources"}, "keepRunning": "keep running",
+    "descManaged": "Docker Compose project", "descDiscovered": "Discovered via Docker labels",
+    "workingDirs": {"one": "{count} working directory: see Details", "other": "{count} working directories: see Details"},
+    "pathUnavailable": "Source path unavailable", "moreIssues": "+{count} more in Details",
+    "upTitle": "No containers yet: create them from the Compose file",
+    "startTitle": "docker compose start: resumes existing containers, never recreates them"
+  },
+  "action": {"start": "Start", "stop": "Stop", "restart": "Restart", "logs": "Logs", "log": "Log", "details": "Details", "up": "Up", "down": "Down", "edit": "Edit", "import": "Import project", "keep": "Keep running", "unkeep": "Unmark keep running"},
+  "verb": {"start": "start", "stop": "stop", "restart": "restart", "up": "create or recreate", "down": "remove"},
+  "common": {"cancel": "Cancel", "close": "Close", "copy": "Copy", "loading": "Loading…", "standalone": "standalone", "more": "+{count} more", "unknownFile": "unknown file", "unknownDir": "unknown directory"},
+  "toast": {
+    "copied": "Copied: {text}", "scanned": {"one": "Found {count} Compose project from Docker labels. Nothing was started or stopped.", "other": "Found {count} Compose projects from Docker labels. Nothing was started or stopped."},
+    "done": "{project}: {action} completed", "doneOutput": "{project}: {action} completed · {output}",
+    "imported": "Imported {project}. Existing containers were not modified.", "saved": "Project saved."
+  },
+  "prompt": {"copy": "Copy this command:"},
+  "plan": {
+    "titleOne": "{action} {project}", "titleMany": {"one": "{action} {count} project", "other": "{action} {count} projects"},
+    "summaryMany": "Review what will be affected. Projects run one at a time, providers first.", "summaryOne": "Review before running.",
+    "blocked": "Blocked by preflight", "affects": {"one": "{verb} {count} container: {containers}", "other": "{verb} {count} containers: {containers}"},
+    "notSelected": "Not selected: {reason}. Tick it to include it.",
+    "runN": {"one": "{action} {count} project", "other": "{action} {count} projects"}, "nothing": "Nothing selected", "run": "Run", "review": "Review",
+    "running": "Running one project at a time…", "cancelRemaining": "Cancel remaining", "cancelling": "Stopping after the current project…",
+    "result": "{done} done · {failed} failed · {skipped} skipped or cancelled",
+    "relatedProvider": "{project} joins its network", "relatedDependent": "joins the network of {project}"
+  },
+  "job": {"pending": "pending", "running": "running", "done": "done", "failed": "failed", "skipped": "skipped", "cancelled": "cancelled"},
+  "import": {"description": "Imported from Docker discovery"},
+  "details": {
+    "title": "Project details", "subtitle": "Detected Compose metadata", "importTitle": "Needed only for Up and Down",
+    "keepTitle": "Kept-running projects are never offered for stopping in Free up memory", "openTitle": "Open {path}",
+    "status": "Status", "statusValue": "{status} · {running} running / {total} total", "oneoffs": {"one": "{count} one-off", "other": "{count} one-off"},
+    "registered": "Registered", "missing": "(missing)", "deployedFrom": "Deployed from",
+    "source": {"one": "Source {index} · {count} container", "other": "Source {index} · {count} containers"}, "noFileLabel": "no Compose file label",
+    "import": "Import", "needs": "Needs", "usedBy": "Used by", "linkValue": "{project} ({state}) via network {networks}",
+    "linkRunning": "running", "linkNotRunning": "not running", "linkStopped": "stopped",
+    "attention": "Needs attention", "containers": "Containers", "runningFor": "running {time}", "stateAgo": "{state} {time} ago", "oneoffTag": "(one-off)", "noLimit": "none",
+    "limitsFootnote": "Limits shows per-container limits from Compose (none = may use the whole Docker Desktop VM). Limits are only worth adding when measurements show a service starving others.",
+    "terminal": "Do it in a terminal"
+  },
+  "col": {
+    "project": "Project", "memory": "Memory", "cpu": "CPU", "runningFor": "Running for", "notes": "Notes", "container": "Container", "memoryPct": "Memory %", "network": "Network I/O",
+    "service": "Service", "state": "State", "exit": "Exit", "restarts": "Restarts", "health": "Health", "ports": "Ports", "limits": "Limits",
+    "port": "Port", "bind": "Bind", "heldBy": "Held by", "note": "Note", "process": "Process", "pid": "PID",
+    "type": "Type", "count": "Count", "size": "Size", "reclaimable": "Reclaimable", "risk": "Risk", "todo": "What to do", "volume": "Volume", "context": "Context"
+  },
+  "form": {
+    "addTitle": "Add Compose project", "editTitle": "Edit {project}", "intro": "Specify the actual folder on your Mac and Compose filename. No files are moved.",
+    "name": "Project name", "directory": "Absolute directory", "composeFile": "Compose filename (relative to directory)", "description": "Description",
+    "descriptionPlaceholder": "Laravel development", "save": "Save project"
+  },
+  "groups": {
+    "label": "GROUPS FROM DOCKER", "labelTitle": "Created automatically when a project joins another project's Docker network: the group holds that project and every project it needs.",
+    "empty": "No groups yet: a group appears automatically when a project joins another project's Docker network (for example an app and its database or proxy stack).",
+    "with": "with {projects}", "runningOf": "{running}/{total} running",
+    "startTitle": "Start group", "stopTitle": "Stop group", "startPlan": "Start group {group}", "stopPlan": "Stop group {group}"
+  },
+  "resources": {
+    "heading": "Free up memory", "lead": "Running projects, largest first. Nothing stops until you choose.",
+    "vmLine": "Containers use {used} of the {total} Docker Desktop VM ({pct}%) · {cpus} CPUs. Running projects, largest first. Nothing stops until you choose.",
+    "update": "Update metrics", "stopSelected": "Stop selected", "stopN": {"one": "Stop {count} project", "other": "Stop {count} projects"}, "stopPlan": "Stop selected projects",
+    "collecting": "Collecting usage...", "noRunning": "No running Compose projects.", "noContainers": "No running containers.",
+    "keepTitle": "Marked keep running", "selectTitle": "Select to stop", "allContainers": "All running containers",
+    "footnote": "Snapshot from `docker stats`, refreshed every 30 seconds while this page is visible. Low CPU does not mean a project is unused, so nothing is marked idle.",
+    "note": {
+      "usedBy": {"one": "Running {projects} joins its network: stopping it may break it.", "other": "Running {projects} join its network: stopping it may break them."},
+      "keep": "Marked keep running."
+    }
+  },
+  "time": {"minutes": {"one": "{count} min", "other": "{count} min"}, "hours": {"one": "{count} h", "other": "{count} h"}, "days": {"one": "{count} day", "other": "{count} days"}},
+  "ports": {
+    "heading": "Ports", "desc": "Host ports held by containers (running, or reserved by stopped ones) and by other processes on this Mac. Pick free ones for a new project.",
+    "refresh": "Refresh ports", "placeholder": "Check ports, e.g. 5432 3306 8080", "inputLabel": "Ports to check", "check": "Check", "defaults": "Common defaults",
+    "byProject": "By project", "byPort": "By port number", "legendRunning": "running", "legendReserved": "reserved by a stopped container", "legendProcess": "other process",
+    "footnote": "Reserved = a stopped container will need this port when it starts again; taking it for a new project makes that start fail. Ports from 49152 up are assigned at random by macOS and are never suggested. Root-owned listeners are not listed but are caught by Check.",
+    "allInterfaces": "all interfaces", "lanTitle": "Reachable from other machines on your network", "thisDashboard": "(this dashboard)",
+    "stateRunning": "running", "stateReserved": "stopped: reserved", "listening": "listening", "reserved": "reserved", "notDocker": "not Docker",
+    "partly": "partly running", "stoppedReserved": "stopped: ports reserved", "count": {"one": "{count} port", "other": "{count} ports"},
+    "groupStandalone": "Standalone containers", "groupProcess": "Processes on this Mac",
+    "freeNearby": "Free nearby: {ports}", "noneNearby": "No free port nearby below 49152",
+    "chipFree": "{port} free", "freeNow": "Free now", "invisibleHolder": "Something not visible to lsof answers on this port",
+    "resultFree": "free: nothing holds or reserves it.", "resultTaken": "taken by {holders}. {alternatives}.",
+    "invisibleHolderLong": "a process not visible to lsof (root?) that answers on this port",
+    "none": "No ports in use.", "highSummary": {"one": "High ports held by other apps ({count}): usually random, they change when the app restarts", "other": "High ports held by other apps ({count}): usually random, they change when the app restarts"},
+    "highSummaryInitial": "High ports held by other apps",
+    "holder": {"process": "process {process}", "containerIn": "container {container} ({project})", "container": "container {container}"},
+    "note": {"cannotStart": "Cannot start while {holder} holds this port.", "alsoReserved": "Also reserved by stopped {containers}: only one can run at a time.", "dashboard": "This dashboard."}
+  },
+  "disk": {
+    "heading": "Disk usage", "desc": "Runs `docker system df -v` on demand (a few seconds). This tool never deletes anything: copy a command if you decide to clean.",
+    "analyze": "Analyze disk", "analyzing": "Analyzing… docker system df -v usually takes a few seconds.",
+    "volumesFold": "Largest volumes not used by any container ({count} shown)",
+    "inspectFoot": "Inspect one with `docker volume inspect <name>`. Back up before removing anything by hand.",
+    "measured": "Measured {time} with docker system df -v. Figures match Docker's own RECLAIMABLE column.",
+    "risk": {"safe": "Safe to clean", "review": "Review first", "data": "May hold data"},
+    "ctx": {
+      "anonymous": "Anonymous volume: often a database image VOLUME left behind by a removed container", "outside": "Created outside Compose",
+      "projectAlive": "Project still has containers: maybe data of a removed service", "leftover": "Project has no containers left: likely a leftover, check before removing"
+    },
+    "row": {"buildCache": "Build cache", "dangling": "Dangling images", "unusedImages": "Other unused images", "stoppedContainers": "Stopped containers", "unusedVolumes": "Volumes not used by any container"},
+    "note": {
+      "buildCache": "Only speeds up image builds. Removing it makes the next build slower; no project data is touched.",
+      "dangling": "Untagged leftovers of rebuilt images that no container uses.",
+      "unusedImages": "Tagged images that no container uses. Removing one means pulling or rebuilding it again. Review them in Docker Desktop → Images → Unused.",
+      "stoppedContainers": "Removing a container loses its log and files written outside volumes. Use Down on projects you no longer need.",
+      "unusedVolumes": "May contain database or upload data. This tool never removes volumes; back up before removing one by hand."
+    },
+    "cmd": {"monthOld": "Unused for 30+ days (≈ {size})", "allCache": "All unused build cache", "dangling": "Remove dangling images"}
+  },
+  "logs": {
+    "title": "Container logs", "titleFor": "{project} / Logs", "noteInitial": "Latest lines, oldest first", "service": "Service", "lines": "Lines", "errorsOnly": "Errors only",
+    "allServices": "All services", "copyCli": "Copy CLI command", "reload": "Reload", "error": "Error: {message}", "none": "No logs yet.",
+    "noErrors": {"one": "No error-looking lines in the last {count} line.", "other": "No error-looking lines in the last {count} lines."},
+    "note": {"one": "{shown} of {total} line, oldest first", "other": "{shown} of {total} lines, oldest first"},
+    "noteErrors": {"one": "{shown} of {total} line matching error keywords, oldest first", "other": "{shown} of {total} lines matching error keywords, oldest first"}
+  },
+  "footer": {"text": "Docker Dev Manager · localhost only · Stop preserves volumes · Down removes Compose containers and networks"},
+  "exit": {
+    "c0": "Exited normally.", "c1": "Application error: check this service log.", "c2": "Application or shell error: check this service log.",
+    "c126": "Command found but not executable (permissions or format).", "c127": "Command not found in the image.", "c130": "Interrupted (SIGINT).",
+    "c137": "SIGKILL: killed by docker stop after its timeout, by you, or for lack of memory.", "c143": "SIGTERM: stopped normally.",
+    "c255": "Often means Docker Desktop or its VM stopped while this container ran.", "signal": "Killed by signal {signal}.", "generic": "Check this service log.",
+    "policyNo": "Restart policy is \"no\": it does not come back when Docker Desktop restarts. Use Start."
+  },
+  "issue": {
+    "stoppedHint": "Stopped in this project: {services}. Check the log for what it waits on.", "keepsExiting": "The process keeps exiting: check its log.",
+    "restarting": "{service} is stuck restarting (last exit {code})", "restarted": {"one": "{service} restarted {count} time by its restart policy", "other": "{service} restarted {count} times by its restart policy"},
+    "dead": "{service} is dead", "deadHint": "Docker could not stop or remove it cleanly; check Docker Desktop.",
+    "unhealthy": "{service} is running but unhealthy", "unhealthyHint": "Its healthcheck fails: see the log.",
+    "oomLive": "{service} was killed for running out of memory", "oomPast": "{service} was OOM-killed during its last run",
+    "oomLimit": "Container memory limit is {limit}.", "oomNoLimit": "No container limit is set: the Docker Desktop VM ran out of memory.",
+    "startFailed": "{service} failed to start", "exited": "{service} exited with code {code}",
+    "composeMissing": "Registered Compose file is missing", "composeMissingHint": "{path} not found: Up and Down are unavailable; Start, Stop and Logs still work from container labels."
+  },
+  "reason": {
+    "labelsWork": "Start, Stop and Logs work without importing.",
+    "sources": {"one": "Containers come from {count} Compose source ({sources}).", "other": "Containers come from {count} different Compose sources ({sources})."},
+    "source": "{files} in {directory}: {count}",
+    "noMeta": "Working directory or Compose file not available in Docker metadata.",
+    "multiFile": {"one": "Last deployed with {count} Compose file ({files}); import supports one file.", "other": "Last deployed with {count} Compose files ({files}); import supports one file."},
+    "notAbsolute": "Docker paths are not absolute paths."
+  },
+  "preflight": {
+    "portTaken": "Port {port} needed by {service} is taken by running container {container} (project {project}). Stop it first or change the port.",
+    "portTakenStandalone": "Port {port} needed by {service} is taken by running container {container} (not in a Compose project). Stop it first or change the port.",
+    "hostListener": "Port {port} already has a listener on this Mac that is not a container: start may fail with \"address already in use\".",
+    "sharedSources": "This project name is shared by {count} Compose sources ({directories}): {action} acts on all {total} containers.",
+    "noContainersManaged": "No containers exist yet. Use Up in Details to create them.", "noContainers": "No containers exist for this project.",
+    "alreadyRunning": "Already running.", "alreadyStopped": "Already stopped.",
+    "missingNetwork": "Network \"{network}\" no longer exists, so Docker cannot start containers attached to it. Start the project that creates it, or Up this project.",
+    "providerStopped": "Joins network {networks} of project {project}, which is not running: services it provides (database, cache, proxy…) stay unreachable until it starts.",
+    "bindMissing": "Bind mount source {path} no longer exists (folder moved or deleted?).",
+    "downNeedsImport": "Down is only available for imported projects.",
+    "dependents": {"one": "Running {projects} joins this project's network ({networks}): its access to this project's services will break.", "other": "Running {projects} join this project's network ({networks}): their access to this project's services will break."},
+    "dependentsDown": {"one": "Running {projects} joins this project's network ({networks}): Down removes that network and its access to this project's services will break.", "other": "Running {projects} join this project's network ({networks}): Down removes that network and their access to this project's services will break."},
+    "keepRunning": "You marked this project \"keep running\".", "downInfo": "Down removes the Compose containers and networks of this project. Named volumes are kept.",
+    "upNeedsImport": "Up is only available for imported projects: it needs the exact Compose file.",
+    "composeInvalid": "Compose config is invalid: {detail}", "externalNetwork": "External network \"{network}\" does not exist. Start the project that creates it first.",
+    "upRecreates": "Up creates missing containers and recreates any whose configuration changed."
+  },
+  "error": {
+    "projectName": "Project name must be 1–50 letters, numbers, _ or -.", "directoryAbsolute": "Directory must be an absolute path.", "directoryMissing": "Project directory does not exist.",
+    "composeRelative": "Compose file must be a relative path.", "composeMissing": "Compose file does not exist.", "composeOutside": "Compose file must remain inside project directory.",
+    "description": "Description must be at most 240 characters.", "workspace": "Invalid workspace.",
+    "language": "Language must be vi or en.", "keepRunningList": "Keep running must be a list of Compose project names.",
+    "labelMode": "Refusing label mode: Compose would load {file}.", "action": "Action must be one of: {actions}.", "projects": "Projects must be a list of 1–50 Compose project names.",
+    "oneProject": "{action} runs on one project at a time.", "tooLarge": "Request too large.", "invalidJson": "Invalid JSON.",
+    "forbidden": "Forbidden: open the dashboard using localhost, and provide the session token for changes.", "dockerOffline": "Unable to connect to Docker Engine. Start Docker Desktop.",
+    "projectsNotFound": "Project not found: {projects}", "jobNotFound": "Job not found.", "projectExists": "A project with this name already exists.", "projectNotFound": "Project not found.",
+    "unknownService": "Unknown service for this project.", "macOnly": "Opening folders is only supported on macOS.", "unknownApp": "Unknown application.",
+    "directoryUnknown": "Directory is not known for this project.", "directoryNotFound": "Directory not found: {path}", "busy": "An operation is already running for this project.",
+    "needsImport": "{action} needs an imported project (exact Compose file). Import it in Details.", "confirm": "Confirmation must equal: {phrase}",
+    "preflight": "Preflight failed: {details}", "portsCheck": "Check up to 20 ports between 1 and 65535.", "notFound": "Not found.", "invalidResponse": "Invalid server response."
+  },
+  "cli": {
+    "status": "Status", "followLogs": "Follow logs", "start": "Start", "stop": "Stop", "restart": "Restart", "up": "Up (create/recreate)", "down": "Down",
+    "upAsDeployed": "Up as last deployed (add --env-file/--profile if you normally use them)"
+  }
+}

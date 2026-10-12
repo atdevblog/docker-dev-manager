@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Favicon cut of logo.svg. At 16 px (non-Retina tabs) the media query swaps in a pixel-grid
+       drawing (3x3 px containers, 1 px gaps) so the stack stays crisp instead of blurring. -->
+  <style>.px{display:none}@media (max-width:24px){.px{display:inline}.hd{display:none}}</style>
+  <defs>
+    <linearGradient id="f-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1B2436"/><stop offset="1" stop-color="#090D16"/></linearGradient>
+    <linearGradient id="f-gold" gradientUnits="userSpaceOnUse" x1="4" y1="3" x2="28" y2="24"><stop offset="0" stop-color="#FFEB8A"/><stop offset=".45" stop-color="#F2C744"/><stop offset="1" stop-color="#C9971C"/></linearGradient>
+  </defs>
+  <g class="hd">
+    <rect x=".5" y=".5" width="31" height="31" rx="7" fill="url(#f-bg)" stroke="#D4AF37" stroke-opacity=".55"/>
+    <g fill="url(#f-gold)">
+      <rect x="12.25" y="4" width="7.5" height="5.5" rx="1"/>
+      <rect x="7.75" y="11" width="7.5" height="5.5" rx="1"/><rect x="16.75" y="11" width="7.5" height="5.5" rx="1"/>
+      <rect x="3.25" y="18" width="7.5" height="5.5" rx="1"/><rect x="12.25" y="18" width="7.5" height="5.5" rx="1"/><rect x="21.25" y="18" width="7.5" height="5.5" rx="1"/>
+    </g>
+    <polyline points="3.5,27 11.5,27 13.5,25 16,29 18,25.8 19.5,27 26,27" fill="none" stroke="#F2C744" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="27.6" cy="27" r="1.6" fill="#FFE58A"/>
+  </g>
+  <g class="px">
+    <rect x="1" y="1" width="30" height="30" rx="6" fill="#121A29" stroke="#D4AF37" stroke-opacity=".6" stroke-width="2"/>
+    <g fill="#F2C744" shape-rendering="crispEdges">
+      <rect x="14" y="4" width="6" height="6" fill="#FFE27A"/>
+      <rect x="10" y="12" width="6" height="6" fill="#FAD45A"/><rect x="18" y="12" width="6" height="6"/>
+      <rect x="6" y="20" width="6" height="6"/><rect x="14" y="20" width="6" height="6"/><rect x="22" y="20" width="6" height="6" fill="#D9A92A"/>
+    </g>
+  </g>
+</svg>
