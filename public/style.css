@@ -12,6 +12,8 @@ select{padding:7px 9px;font-size:12px}
 input[type=checkbox]{padding:0;width:15px;height:15px;accent-color:var(--blue);flex-shrink:0}
 pre{background:#0b1220;border:1px solid #334059;border-radius:9px;padding:18px;height:min(55vh,500px);overflow:auto;white-space:pre-wrap;word-break:break-all;color:#a6e0c3;font-size:12px}
 .hidden{display:none!important}
+/* Hidden until the saved language is applied (revealed anyway after 1.5 s if scripts fail) */
+html.i18n-pending body{visibility:hidden;animation:i18n-reveal 0s 1.5s forwards}@keyframes i18n-reveal{to{visibility:visible}}
 .spacer{flex:1}
 .smalltext{font-size:11px;color:#97aac3}
 .footnote{font-size:11px;color:#7f8ea5;margin:10px 2px 0}
@@ -64,6 +66,8 @@ footer{color:#6e7d93;font-size:11px;margin-top:37px}
 .metric{padding:21px 23px;background:var(--panel);border:1px solid var(--border);border-radius:13px}
 .metric{display:flex;flex-direction:column;align-items:stretch}.metric span{display:block;font-size:12px;color:var(--sub)}.metric span+span{margin-top:3px}
 .tilelabel{font-weight:600}
+/* A tile's own measure button sits at its bottom, so the label keeps one line */
+.tilefoot{margin-top:auto;padding-top:12px}.tilefoot .btn.mini{padding:5px 10px}
 .metric strong small{font-size:15px;font-weight:600;color:var(--sub);margin-left:2px;letter-spacing:0}
 .metric strong{display:block;font-size:clamp(22px,2vw,30px);letter-spacing:-1px;margin:10px 0 8px;white-space:nowrap}
 .metricbtn{text-align:left;color:inherit;font:inherit;cursor:pointer}.metricbtn:hover{border-color:#4a5c79}
@@ -85,6 +89,9 @@ footer{color:#6e7d93;font-size:11px;margin-top:37px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(355px,1fr));gap:16px;min-height:90px}
 .project{background:var(--panel);border:1px solid var(--border);border-radius:13px;padding:19px 20px;display:flex;flex-direction:column;min-height:260px;transition:border-color .15s}
 .project:hover{border-color:#4a5c79}.project.attention{border-color:#6b3a46}
+/* Status stripe on the left edge: inset shadow, so cards keep the same size */
+.project.st-running{box-shadow:inset 3px 0 0 var(--green)}.project.st-partial{box-shadow:inset 3px 0 0 var(--amber)}
+.project.st-error{box-shadow:inset 3px 0 0 var(--red)}.project.st-stopped{box-shadow:inset 3px 0 0 #4b5568}
 .projtitle{display:flex;align-items:center;gap:9px}
 .projtitle h3{font-size:16px;margin:0;overflow-wrap:anywhere}
 .projicon{display:grid;place-items:center;background:#203450;color:#8cb0ff;border-radius:9px;width:31px;height:31px}
@@ -101,7 +108,37 @@ footer{color:#6e7d93;font-size:11px;margin-top:37px}
 .services{display:flex;flex-wrap:wrap;gap:6px;margin:9px 0 14px;min-height:25px}
 .servicechip{background:#202d40;border:1px solid #314057;border-radius:6px;padding:5px 7px;color:#b9c9dd;font-size:10px}
 .servicechip i{width:6px;height:6px;display:inline-block;border-radius:50%;background:#8390a5;margin-right:5px}
-.servicechip i.live{background:var(--green)}.servicechip i.bad{background:var(--red)}
+/* Container states: the same colour for the badge, the row bar and the chip dot, always with an icon and words */
+.cs-running{--cs-fg:#65e6b2;--cs-bg:#153e35;--cs-bar:var(--green)}
+.cs-paused{--cs-fg:#f5c56c;--cs-bg:#4a3c24;--cs-bar:var(--amber)}
+.cs-stopped{--cs-fg:#b9c4d4;--cs-bg:#2a3242;--cs-bar:#5b6779}
+.cs-failed,.cs-restarting,.cs-unhealthy{--cs-fg:#ff98ab;--cs-bg:#4d2936;--cs-bar:var(--red)}
+.cs-starting,.cs-created,.cs-busy{--cs-fg:#9cc0ff;--cs-bg:#1f3352;--cs-bar:var(--blue)}
+.cstate{display:inline-flex;align-items:center;gap:5px;flex-shrink:0;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--cs-bg,#2a3242);color:var(--cs-fg,#b9c4d4);white-space:nowrap}
+.cstate i{font-style:normal;font-size:9px;font-weight:900}
+.servicechip i[class^="cs-"]{background:var(--cs-bar)}
+td .cstate+.smalltext{margin-top:4px}
+/* Containers of a project: chips while closed, one row per container with its own controls when open */
+.containerfold{margin:9px 0 14px}
+.containerfold summary{display:block;cursor:pointer;list-style:none;border-radius:7px}
+.containerfold summary::-webkit-details-marker{display:none}
+.containerfold summary:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.foldlabel{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:650;color:#a9bbd1;transition:color .15s}
+.foldlabel::before{content:'▸';display:inline-block;font-size:13px;color:#c9d6e8;transition:transform .15s}
+.containerfold[open] .foldlabel::before{transform:rotate(90deg)}
+.containerfold summary:hover .foldlabel{color:#e3ecf8}.containerfold summary:hover .servicechip{border-color:#47597a}
+.containerfold .services{margin:8px 0 0}.containerfold[open] .services{display:none}
+.containerlist{list-style:none;margin:8px 0 0;padding:0;border:1px solid #2b3648;border-radius:10px;max-height:360px;overflow:auto}
+.containerrow{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;padding:7px 10px 7px 11px;border-bottom:1px solid #2b3648;border-left:3px solid var(--cs-bar,#5b6779)}
+.containerrow:last-child{border-bottom:0}.containerrow:hover{background:#1b2536}
+.containermain{display:flex;flex-direction:column;gap:3px;min-width:0}
+.containerhead{display:flex;align-items:center;gap:8px;min-width:0}
+.containermain strong{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.rowactions .btn.mini:not(:disabled):hover{filter:none;background:#2b3a52}
+.rowactions .act-start:not(:disabled):hover{color:#65e6b2;border-color:#2f7d63}.rowactions .act-stop:not(:disabled):hover{color:#ff98ab;border-color:#81414c}
+.portlink{color:#8fb2ff;font-family:var(--mono);font-size:10.5px;text-decoration:none;border:1px solid #2f4466;border-radius:5px;padding:0 4px}
+.portlink:hover{text-decoration:underline}
+.rowactions{display:flex;gap:4px;white-space:nowrap}.rowactions .btn.mini{min-width:28px;min-height:26px;padding:3px 7px}
 .actions{flex-wrap:wrap;margin-top:auto;padding-top:12px;border-top:1px solid #30394a}.actions .btn{padding:8px 10px}
 .empty{grid-column:1/-1;border:1px dashed #41516b;background:#131e2e;border-radius:12px;padding:40px;text-align:center}.empty h3{font-size:16px;margin:0}
 
@@ -153,6 +190,8 @@ dialog::backdrop{background:#03070dcc}
 .detailhead{margin:22px 0 8px;font-size:13px;color:#c9d5e8}
 .detailrow{display:grid;grid-template-columns:145px 1fr;gap:12px;border-bottom:1px solid #354258;padding:12px 0;font-size:12px;overflow-wrap:anywhere}
 .detailrow strong{color:#91a4c2}.detailrow span{color:#e0e9f7;white-space:pre-line}
+/* The containers table in Details has eight columns: tighter cells keep the row buttons in view */
+#inspectContent td,#inspectContent th{padding:10px 11px}
 .planlist{display:flex;flex-direction:column;gap:10px;max-height:min(58vh,560px);overflow:auto;margin-top:16px}
 .planitem{border:1px solid var(--border);border-radius:10px;padding:11px 13px;background:#151e2c;display:flex;flex-direction:column;gap:7px}.planitem.related{border-style:dashed}
 .dialogInner .planhead,.logbar label{display:flex;align-items:center;gap:9px;margin-top:0;flex-wrap:wrap}
@@ -181,6 +220,10 @@ pre.joboutput{height:auto;max-height:90px;margin:0;padding:8px 10px;font-size:11
 /* Health & resource advisor: three equal cards; long lists scroll inside, so the page never jumps on refresh */
 .advisor{margin:0 0 40px}
 .advisorgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:stretch}
+.advisorgrid.waiting .advisorcard{height:auto;min-height:0}
+/* Results older than the last start/stop: the refresh button says so */
+.btn.stalebtn{border-color:#8a6a2c;color:#f5c56c}
+#advisorSummary .textwarning{color:#f1d29b}
 .advisorcard{display:flex;flex-direction:column;min-height:300px;height:clamp(380px,calc(100vh - 300px),560px);background:var(--panel);border:1px solid var(--border);border-radius:13px;padding:16px 16px 12px}
 .advisorhead{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-shrink:0;min-height:58px}.advisorhead h3{font-size:14px;margin:0 0 2px}
 .count{margin-left:auto;min-width:24px;text-align:center;font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;background:#21385d;color:#cfe0ff}.count:empty{display:none}

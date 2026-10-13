@@ -65,10 +65,19 @@ test('HTTP: new endpoints keep the host, origin and token rules',async()=>{
   assert.equal((await send('/api/workspace','PUT',{keepRunning:['bad name']},auth)).status,400);
   assert.equal((await send('/api/plan','POST',{action:'prune',projects:['a']},auth)).status,400);
   assert.equal((await send('/api/batch','POST',{action:'down',projects:['a']},auth)).status,400);
+  // Container actions: token required, only start/stop/restart, and only a 12-hex container id.
+  assert.equal((await send('/api/projects/a/containers/0123456789ab/stop','POST',{})).status,403);
+  assert.equal((await send('/api/projects/a/containers/0123456789ab/plan','POST',{action:'rm'},auth)).status,400);
+  assert.equal((await send('/api/projects/a/containers/zzzzzzzzzzzz/stop','POST',{},auth)).status,404);
+  assert.equal((await send('/api/projects/a/containers/0123456789AB/kill','POST',{},auth)).status,404);
   assert.equal((await fetch(base+'/api/jobs/00000000-0000-4000-8000-000000000000')).status,404);
   const adv=await (await fetch(base+'/api/advisor')).json();
   assert.equal(typeof adv.health.score,'number');assert.ok(['good','fair','poor'].includes(adv.health.grade));assert.ok(Array.isArray(adv.actions)&&Array.isArray(adv.waste)&&Array.isArray(adv.keep));
-  assert.ok(adv.health.findings.every(f=>f.points>=0&&f.text&&f.fix));
+  assert.ok(adv.health.findings.every(f=>f.points>=0&&f.text&&f.fix));assert.ok(!Number.isNaN(Date.parse(adv.checkedAt)));
+  // Asking for stats or disk only reuses earlier measurements: the advisor never starts them itself.
+  const reuse=await (await fetch(base+'/api/advisor?parts=health,stats,disk')).json();
+  assert.equal(reuse.parts.stats,false);assert.equal(reuse.parts.disk,false);assert.equal(reuse.statsAt,null);assert.equal(reuse.diskAt,null);
+  const host=await (await fetch(base+'/api/host')).json();assert.ok('vm' in host&&'host' in host);
   const state=await (await fetch(base+'/api/state')).json();
   assert.equal(typeof state.docker.available,'boolean');assert.ok(Array.isArray(state.projects));assert.ok(Array.isArray(state.groups));assert.deepEqual(state.workspace.keepRunning,['infra']);
  }finally{await new Promise(r=>server.close(r));}
@@ -90,8 +99,29 @@ test('language preference: stored in the config file, kept by other saves, survi
   const body=await bad.json();assert.equal(body.error,'Language must be vi or en.');assert.equal(body.message.key,'error.language');
  }finally{await new Promise(r=>server.close(r));}
  ({server,base}=await start());
- try{const w=await (await fetch(base+'/api/workspace')).json();assert.equal(w.language,'vi');assert.deepEqual(w.keepRunning,['p']);}
+ try{
+  const w=await (await fetch(base+'/api/workspace')).json();assert.equal(w.language,'vi');assert.deepEqual(w.keepRunning,['p']);
+  // The page carries the saved language, so its first frame is right whatever the browser stored.
+  assert.match(await (await fetch(base+'/')).text(),/<html lang="vi" data-saved-lang="vi"/);
+  const saved=fs.readFileSync(FILE);fs.writeFileSync(FILE,'{broken');
+  try{const r=await fetch(base+'/');assert.equal(r.status,200,'a corrupt config never blocks the page');assert.match(await r.text(),/data-saved-lang=""/);}
+  finally{fs.writeFileSync(FILE,saved);}
+ }
  finally{await new Promise(r=>server.close(r));}
+});
+test('measurements survive a reload and a restart; week-old ones are dropped',async()=>{
+ const MFILE=path.join(path.dirname(FILE),'measurements.json');
+ const server=S.startServer(0);await new Promise(r=>server.once('listening',r));const base=`http://127.0.0.1:${server.address().port}`;
+ try{
+  await fetch(base+'/api/advisor?parts=health');
+  assert.ok(Date.parse((await (await fetch(base+'/api/measured')).json()).healthAt)>0);assert.equal(fs.statSync(MFILE).mode&0o777,0o600);
+  // A file left by an earlier run: recent parts come back as they were, a week-old one is dropped.
+  const now=Date.now(),at=now-120000,rows=[{key:'buildCache',count:1,size:1,reclaimable:1,risk:'safe',commands:[]}];
+  fs.writeFileSync(MFILE,JSON.stringify({healthAt:now-60000,stats:{at:now-8*86400000,value:[]},disk:{at,value:{rows,unusedVolumes:[],generatedAt:new Date(at).toISOString()}},activity:[]}));
+  S.loadMeasurements();
+  const m=await (await fetch(base+'/api/measured')).json();
+  assert.equal(Date.parse(m.healthAt),now-60000);assert.equal(m.disk.rows[0].key,'buildCache');assert.equal(m.resources,null);
+ }finally{await new Promise(r=>server.close(r));}
 });
 test('static files include the i18n runtime, both dictionaries and the icons, nothing else',async()=>{
  const server=S.startServer(0);await new Promise(r=>server.once('listening',r));const base=`http://127.0.0.1:${server.address().port}`;

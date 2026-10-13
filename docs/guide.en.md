@@ -41,11 +41,11 @@ There is nothing to install: the project has no npm dependencies. Open **http://
 - **Sidebar**: jump to Projects, Resources, Ports or Disk. The dot at the bottom shows whether Docker Engine is reachable.
 - **Header**: switch language (*Tiếng Việt / English*), **Refresh**, and **Add manually** for a project that has no containers yet.
 - **Overview cards** (click one to jump to the matching section):
-  - *Docker health*: the advisor's score out of 100 with its status (Healthy, Needs attention, Unhealthy), the number of problems and the Docker version. It turns red when Docker Engine is unreachable.
+  - *Docker health*: the advisor's score out of 100 with its status (Healthy, Needs attention, Unhealthy), the number of problems and when it was checked. It says *Not checked* until you click **Check** on the card (about half a second). It turns red when Docker Engine is unreachable.
   - *Running projects*: running out of total, with the number of containers and of projects that need attention.
-  - *Container RAM*: memory used by containers against the Docker Desktop VM size (with a meter), CPU in cores, and the largest project.
+  - *Container RAM*: memory used by containers against the Docker Desktop VM size (with a meter), CPU in cores, and the largest project. It needs `docker stats` (about 2 seconds of Docker work), so it says *Not measured* until you click **Measure** on the card.
   - *Mac memory*: memory used (counted like Activity Monitor) against the total, with a meter whose colour follows macOS memory pressure, plus swap and CPU. Heavy swap is highlighted when memory is short.
-  - *Reclaimable disk*: what can be cleaned safely, plus what needs review first.
+  - *Reclaimable disk*: what can be cleaned safely, plus what needs review first. Click **Analyze** on the card (`docker system df -v`, a few seconds).
 - **Filters**: All, Running, *Needs attention* (projects with problems), Managed, Discovered, plus a search box.
 - **Health & resource advisor**: a health score, where resources are wasted and what to do now (see [section 3](#3-health--resource-advisor)).
 - **Groups from Docker**: projects that belong together, detected automatically, with ▶ start and ■ stop (see [section 6](#7-groups-from-docker)).
@@ -60,13 +60,21 @@ Scroll down for the project cards:
 
 ![Project cards](images/en-projects.png)
 
-Everything refreshes every 15 seconds while the page is visible.
+On each card, **▸ N containers** opens one row per container with its own buttons (see [One container at a time](#one-container-at-a-time)).
+
+The project list and *Mac memory* refresh every 15 seconds while the page is visible: they are cheap. Measurements run only when you click the button on their card, one at a time, so the dashboard stays light. Once measured, the button reads **↻ Check again**, **↻ Measure again** or **↻ Analyze again**, and the card shows when it was measured. Measurements are remembered: after a reload (or a restart) they come back with their time. Only the health check runs again by itself, since it takes half a second; RAM/CPU and disk wait for your click.
 
 ## 3. Health & resource advisor
 
 ![Health & resource advisor](images/en-advisor.png)
 
-The advisor sits right under the overview cards and answers three questions. It refreshes every 30 seconds; **Re-check** updates it at once.
+The advisor sits right under the overview cards and answers three questions from what you measured on the cards above; it has no buttons of its own:
+
+- **Check** on *Docker health* fills *What is wrong?*
+- **Measure** on *Container RAM* (`docker stats`) and **Analyze** on *Reclaimable disk* (`docker system df -v`) fill *Where is waste?*. The same results also fill [Free up memory](#8-free-up-memory) and [Disk](#10-clean-disk-space-safely).
+- *What to do now?* combines whatever has been measured, and says what is not covered yet.
+
+After you start or stop something, the summary says the figures are older; click ↻ on the card to update it.
 
 **What is wrong?** The health score starts at 100. Each problem deducts a fixed number of points, never an opaque number, and every line shows the cause, the fix and a button (open the log, review and start, details…). Hover a line for Docker's own explanation. 90–100 is *Healthy*, 70–89 *Needs attention*, below 70 *Unhealthy*. *How the score works* lists every rule:
 
@@ -84,15 +92,15 @@ The advisor sits right under the overview cards and answers three questions. It 
 | Docker VM memory 90%+ used | −10 | |
 
 **Where is waste?**
-- *Idle projects*: running, but with no network traffic and CPU under 1% for at least 15 minutes. Low CPU alone never makes a project idle. The dashboard only measures while its page is open, so right after opening it tells you how many minutes it still needs.
+- *Idle projects*: running, but with no network traffic and CPU under 1% between two RAM/CPU measurements at least 15 minutes apart. Low CPU alone never makes a project idle. After the first measurement, the advisor tells you when to measure again.
 - Containers burning CPU in a crash loop.
 - Disk Docker could give back (build cache, dangling and unused images, stopped containers, unused volumes), each with its safety level.
 
-**What to do now?** A ranked list, most serious first. Each action carries its level: **Urgent** (broken right now: crash loop, out of memory, failed start), **Important** (degraded service or memory pressure), **Recommended** (idle projects, past problems) and **Optional** (disk housekeeping). Each column keeps the same height and scrolls on its own, so the page does not jump when the advisor refreshes.
+**What to do now?** A ranked list, most serious first. Each action carries its level: **Urgent** (broken right now: crash loop, out of memory, failed start), **Important** (degraded service or memory pressure), **Recommended** (idle projects, past problems) and **Optional** (disk housekeeping). Each column keeps the same height and scrolls on its own, so the page does not jump.
 - Each action shows the estimated gain (≈ RAM or disk), a risk level and a button. Start and stop buttons open the usual review window; nothing runs without it.
 - Idle projects are suggested together. A project they need (database, proxy) is added only when it is idle too and nothing else uses it. Under memory pressure (macOS warning or Docker VM 80%+), the largest projects are suggested as well, marked *Review first* because they are in use.
 - Disk: safe categories come with a command to copy; images and volumes open the Disk section. Volumes are never removed automatically.
-- **Keep running** lists the running projects that should stay, with the reason: marked keep running, used by another running project, in use, or not observed long enough yet.
+- **Keep running** lists the running projects that should stay, with the reason: marked keep running, used by another running project, in use, or not measured long enough yet.
 
 To change the idle threshold: `DEV_MANAGER_IDLE_MINUTES=30 npm start`.
 
@@ -114,6 +122,15 @@ Before every action the dashboard checks for problems. If everything is fine, it
 - **Amber** messages are warnings you can accept. In the example, other projects use the network of `infra`, so stopping it would break them.
 - Related projects appear **unticked**. Tick them if you want to include them; nothing outside your selection runs.
 - A project that other running projects still use, or that you marked *keep running*, is also left **unticked**, as in the example. Stopping it has to be a deliberate choice.
+
+### One container at a time
+
+Like Docker Desktop, every container can be controlled on its own. On a card, click **▸ N containers** (or open **Details**). Each container gets a row with its state, RAM and CPU (once measured), its host ports (click one to open it in the browser) and three buttons: **▶ Start** or **■ Stop**, **↻ Restart** and **≡ Logs**.
+
+- Each state has its own colour, icon and words, on the row and on the chip: **● Running** (green), **‖ Paused** (amber), **■ Stopped** (grey), **✕ Failed** with its exit code or *Out of memory* (red), **↻ Restarting** (red, a crash loop), **◐ Starting** and **○ Created** (blue). A stop with the usual codes (0, 137, 143) counts as stopped, not failed. Each card also carries a stripe in its project's status colour.
+- They run `docker start`, `docker stop` or `docker restart` on that one container. Its neighbours keep running, and a restart never starts the services it depends on.
+- The same checks apply. Stopping a container that others need (`depends_on`), that sits on a network another running project uses, or that belongs to a *keep running* project opens a review first, for example *"app, worker depend on mariadb: they keep running but may fail until mariadb is back."*
+- Starting one is blocked when its port is taken or its network no longer exists, and warns when a service it depends on is stopped.
 
 ## 5. Why is a project not running?
 
@@ -162,7 +179,7 @@ Groups update by themselves when your Compose files change their networks.
 
 ## 8. Free up memory
 
-Open **Resources** in the sidebar, or click the *Docker containers* card.
+Open **Resources** in the sidebar, or click the *Container RAM* card. Click **Measure RAM/CPU** here or **Measure** on the *Container RAM* card (`docker stats`, about 2 seconds). The figures are a snapshot with its time, and a project stopped since then drops out of the list.
 
 ![Free up memory](images/en-memory.png)
 
@@ -191,7 +208,7 @@ Ports from 49152 up are assigned at random by macOS and are never suggested.
 
 ## 10. Clean disk space safely
 
-Open **Disk** and click **Analyze disk** (it takes a few seconds).
+Open **Disk** and click **Analyze disk** (it takes a few seconds). **Analyze** on the *Reclaimable disk* card does the same.
 
 ![Disk usage](images/en-disk.png)
 
@@ -220,7 +237,7 @@ Up always shows a review first, and checks the Compose file and ports. Down asks
 
 ## 12. Language
 
-Use **Tiếng Việt / English** in the header. The page switches instantly and remembers your choice, even after a restart. Names of projects, containers, paths, ports and log content are never translated.
+Use **Tiếng Việt / English** in the header. The page switches instantly and remembers your choice in the settings file, so it stays after a reload or a restart, and on any address you open the dashboard with (localhost or a local domain). Names of projects, containers, paths, ports and log content are never translated.
 
 ## 13. Questions and problems
 
@@ -231,4 +248,4 @@ Use **Tiếng Việt / English** in the header. The page switches instantly and 
 | Start is blocked | Read the red message: it names the container holding the port, or the missing network. |
 | `N sources` badge | The project name was started from different folders or Compose file sets. Details lists each source, and Stop/Start act on all of them. |
 | Port 4173 already in use | Run `DEV_MANAGER_PORT=4174 npm start`. |
-| No CPU/RAM figures | Run `docker stats --no-stream` in a terminal to check Docker. |
+| No CPU/RAM figures | They are measured on demand: click **Measure** on the *Container RAM* card. If they stay empty, run `docker stats --no-stream` in a terminal to check Docker. |

@@ -60,6 +60,27 @@ test('port conflicts respect bind addresses and ignore the project itself',()=>{
  const conflicts=A.portConflicts([target],all,'erp');
  assert.deepEqual(conflicts.map(c=>[c.port,c.by,c.byProject]),[[6379,'redis','fleet']]);
 });
+test('container actions touch one container and name the services around it',()=>{
+ const deps={'com.docker.compose.depends_on':'mariadb:service_healthy:false,redis:service_started:false'};
+ const ps=summarize([{name:'nginx',project:'fleet',networks:['fleet']},{name:'mariadb',project:'fleet',networks:['fleet']},{name:'redis',project:'fleet',state:'exited',networks:['fleet']},
+  {name:'app',project:'fleet',labels:deps,networks:['fleet']},{name:'queue',project:'fleet',state:'exited',labels:deps,networks:['fleet','gone'],ports:{'80/tcp':[{HostIp:'',HostPort:'8088'}]}},
+  {name:'odoo',project:'shop',networks:['fleet']},{name:'web',project:'other',ports:{'80/tcp':[{HostIp:'',HostPort:'8088'}]}}]);
+ const networks=new Map([['fleet','fleet']]);A.linkProjects(ps,networks);
+ const fleet=ps.find(p=>p.name==='fleet'),ctx={containers:ps.flatMap(p=>p.containers),networks,keepRunning:['fleet']};
+ const plan=(action,name)=>A.containerPlan(action,fleet,fleet.containers.find(c=>c.name===name),ctx);
+ // Stop: the running dependent (not the exited one), the project sharing the network, and keep running.
+ const stop=plan('stop','mariadb');
+ assert.deepEqual(stop.containers,['mariadb']);assert.equal(stop.errors.length,0);
+ assert.deepEqual(stop.warnings.map(text),['app depends on mariadb: it keeps running but may fail until mariadb is back.',
+  'Running project shop uses network fleet, which this container is on, and may rely on it.','You marked this project "keep running".']);
+ assert.deepEqual(plan('restart','mariadb').warnings,[]);
+ // Start: a missing network and a taken port block; a stopped dependency only warns.
+ const start=plan('start','queue');
+ assert.equal(start.errors.length,2);assert.match(text(start.errors[0]),/"gone"/);assert.match(text(start.errors[1]),/8088.*web/);
+ assert.deepEqual(start.warnings.map(text),['queue depends on redis, which is not running: start it first, or queue may fail to start.']);
+ // Nothing to do is a skip with a reason, never an error.
+ assert.deepEqual([plan('start','nginx'),plan('stop','redis'),plan('restart','redis')].map(i=>[i.skip,text(i.info)]),[[true,'Already running.'],[true,'Already stopped.'],[true,'Not running: use Start.']]);
+});
 test('execution order starts providers first and stops them last',()=>{
  const projects=[{name:'fleet',dependsOn:[]},{name:'erp',dependsOn:[{project:'fleet'}]},{name:'shop',dependsOn:[{project:'erp'},{project:'fleet'}]}];
  assert.deepEqual(A.executionOrder('start',['shop','erp','fleet'],projects),['fleet','erp','shop']);

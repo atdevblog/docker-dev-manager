@@ -19,6 +19,9 @@ const IDLE_MINUTES = Number(process.env.DEV_MANAGER_IDLE_MINUTES) > 0 ? Number(p
 const HOST = '127.0.0.1';
 const CONFIG_DIR = process.env.DEV_MANAGER_CONFIG_DIR || path.join(os.homedir(), '.config', 'docker-dev-manager');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'projects.json');
+// Last measurements, so a reload or a restart shows them again (with their time) instead of measuring.
+const MEASURE_FILE = path.join(CONFIG_DIR, 'measurements.json');
+const MEASURE_MAX_AGE = 7*86400000;
 const STATIC_DIR = path.join(__dirname, 'public');
 const TOKEN = crypto.randomBytes(24).toString('hex');
 const operations = new Set();
@@ -65,12 +68,13 @@ function validWorkspace(w) {
   if (!Array.isArray(keep) || keep.length>100 || keep.some(n=>typeof n!=='string'||!NAME.test(n))) throw appError('error.keepRunningList');
   return {keepRunning:[...new Set(keep)],...(w.language!==undefined?{language:w.language}:{})};
 }
-function writeStore(store) {
+function writeJson(file,value) {
   fs.mkdirSync(CONFIG_DIR,{recursive:true,mode:0o700});
-  const tmp = CONFIG_FILE+'.'+process.pid+'.tmp';
-  fs.writeFileSync(tmp,JSON.stringify(store,null,2)+'\n',{mode:0o600});
-  fs.renameSync(tmp,CONFIG_FILE);
+  const tmp = file+'.'+process.pid+'.tmp';
+  fs.writeFileSync(tmp,JSON.stringify(value,null,2)+'\n',{mode:0o600});
+  fs.renameSync(tmp,file);
 }
+function writeStore(store) { writeJson(CONFIG_FILE,store); }
 // Each writer replaces only its own keys; everything else in the file is preserved.
 function writeConfig(projects) { writeStore({...readStore(),projects}); }
 function writeWorkspace(workspace) { writeStore({...readStore(),...workspace}); }
@@ -106,6 +110,7 @@ function cached(ttl,load) {
   };
   get.invalidate=()=>{at=0;};
   get.peek=()=>at?{value,at}:null;
+  get.seed=(v,when)=>{value=v;at=when;};
   return get;
 }
 // `docker version` costs about 1/20 of the host CPU of `docker info`, which also enumerates CLI plugins.
@@ -190,15 +195,16 @@ async function stats() {
   recordActivity(list);
   return list;
 }
-// Per-container samples for idle detection, kept in memory only and only for two idle windows.
+// Per-container samples for idle detection, kept in memory only. Stats are measured only when the
+// user asks, so a sample is kept for hours: two measurements at least one idle window apart decide.
 const activityHistory = new Map();
 function recordActivity(list) {
-  const now=Date.now(),keepFor=2*IDLE_MINUTES*60000,live=new Set(list.map(s=>String(s.id).slice(0,12)));
+  const now=Date.now(),keepFor=Math.max(2*IDLE_MINUTES,360)*60000,live=new Set(list.map(s=>String(s.id).slice(0,12)));
   for(const s of list){const id=String(s.id).slice(0,12),h=activityHistory.get(id)||[];h.push({t:now,net:s.netBytes,cpu:s.cpuPercent});while(h.length&&now-h[0].t>keepFor)h.shift();activityHistory.set(id,h);}
   for(const id of activityHistory.keys())if(!live.has(id))activityHistory.delete(id);
 }
 const statsCached = cached(5000, stats);
-// CPU is averaged since the previous resources call (the UI asks every 30s), or since server start.
+// CPU is averaged since the previous host call (the UI asks every 15s), or since server start.
 // It is sampled before this call starts its own docker commands so it does not measure itself.
 let lastCpus = os.cpus(), lastCpuAt = Date.now();
 function hostCpu() {
@@ -219,10 +225,38 @@ async function hostMemory() {
 async function hostInfo(cpu) {
   return {cores:os.cpus().length,...cpu,memory:await hostMemory()};
 }
-async function resourcesView() {
+// Cheap enough to poll (~20 ms): this Mac's memory and CPU, plus the Docker VM size (cached).
+async function hostView() {
   const cpu=hostCpu();
-  const [{projects},containers,vm,host]=await Promise.all([currentProjects(10000),statsCached(),vmInfo().catch(()=>({memTotal:0,ncpu:0})),hostInfo(cpu).catch(()=>null)]);
-  return {vm,host,...A.resourceView(projects,containers,readWorkspace().keepRunning)};
+  const [vm,host]=await Promise.all([vmInfo().catch(()=>({memTotal:0,ncpu:0})),hostInfo(cpu).catch(()=>null)]);
+  return {vm,host};
+}
+// `docker stats` costs about 2 s of Docker CPU, so it runs only when the user asks.
+async function resourcesView() {
+  const [{projects},containers,{vm,host}]=await Promise.all([currentProjects(10000),statsCached(),hostView()]);
+  saveMeasurements();
+  return {vm,host,...A.resourceView(projects,containers,readWorkspace().keepRunning),measuredAt:new Date(statsCached.peek()?.at||Date.now()).toISOString()};
+}
+// Measurements live in memory and in measurements.json: a page reload or a restart gets them back.
+let lastHealthAt=0;
+function saveMeasurements() {
+  const s=statsCached.peek(),d=diskReport.peek();
+  try{writeJson(MEASURE_FILE,{healthAt:lastHealthAt||null,stats:s,disk:d,activity:[...activityHistory]});}catch{}
+}
+function loadMeasurements() {
+  let m;try{m=JSON.parse(fs.readFileSync(MEASURE_FILE,'utf8'));}catch{return;}
+  const fresh=x=>x&&Number.isFinite(x.at)&&Date.now()-x.at<MEASURE_MAX_AGE;
+  if(fresh(m.stats)&&Array.isArray(m.stats.value))statsCached.seed(m.stats.value,m.stats.at);
+  if(fresh(m.disk)&&m.disk.value&&Array.isArray(m.disk.value.rows))diskReport.seed(m.disk.value,m.disk.at);
+  if(Number.isFinite(m.healthAt)&&Date.now()-m.healthAt<MEASURE_MAX_AGE)lastHealthAt=m.healthAt;
+  for(const [id,h] of Array.isArray(m.activity)?m.activity:[])if(typeof id==='string'&&Array.isArray(h))activityHistory.set(id,h.filter(x=>Number.isFinite(x?.t)));
+}
+// What the page shows again after a reload, without running `docker stats` or `system df`.
+async function measuredView() {
+  const s=statsCached.peek(),d=diskReport.peek();
+  let resources=null;
+  if(s){const [{projects},{vm,host}]=await Promise.all([currentProjects(10000),hostView()]);resources={vm,host,...A.resourceView(projects,s.value,readWorkspace().keepRunning),measuredAt:new Date(s.at).toISOString()};}
+  return {healthAt:lastHealthAt?new Date(lastHealthAt).toISOString():null,resources,disk:d?.value||null};
 }
 // Listening TCP sockets of this user's processes (~0.1s). Root-owned listeners are invisible to lsof,
 // so a port check also probes the port directly.
@@ -250,18 +284,20 @@ async function portsView(check) {
   }
   return {entries,checks,ephemeralStart:A.EPHEMERAL_START};
 }
-const DISK_ADVISOR_TTL = 30*60000;
-// The advisor never waits for `system df -v` (seconds): it uses the last report and refreshes it in the background.
-async function advisorView() {
-  const docker=await dockerInfo();
-  if(!docker.available)return {...Advisor.advise({docker}),diskPending:false};
-  const workspace=readWorkspace();
-  const [{projects},stats_,vm,memory,entries]=await Promise.all([currentProjects(5000),statsCached().catch(()=>[]),vmInfo().catch(()=>({memTotal:0,ncpu:0})),hostMemory().catch(()=>null),portEntries().catch(()=>[])]);
-  const disk=diskReport.peek();
-  if(!disk||Date.now()-disk.at>DISK_ADVISOR_TTL)diskReport(DISK_ADVISOR_TTL).catch(()=>{});
-  const {containers}=A.resourceView(projects,stats_,workspace.keepRunning);
+// Each box of the page has its own measurement. This view runs only the cheap health checks
+// (container states, memory pressure, ports, ~0.5 s) and reuses the last `docker stats` and
+// `system df -v` results for the parts the user has measured; it never starts those itself.
+async function advisorView(asked) {
+  const docker=await dockerInfo(),checkedAt=new Date().toISOString();
+  if(asked.has('health')){lastHealthAt=Date.now();saveMeasurements();}
+  if(!docker.available)return {...Advisor.advise({docker}),parts:{health:asked.has('health'),stats:false,disk:false},checkedAt,statsAt:null,diskAt:null};
+  const workspace=readWorkspace(),stats_=asked.has('stats')?statsCached.peek():null,disk=asked.has('disk')?diskReport.peek():null;
+  const [{projects},vm,memory,entries]=await Promise.all([currentProjects(5000),vmInfo().catch(()=>({memTotal:0,ncpu:0})),hostMemory().catch(()=>null),asked.has('health')?portEntries().catch(()=>[]):[]]);
+  const {containers}=A.resourceView(projects,stats_?.value||[],workspace.keepRunning);
+  const parts={health:asked.has('health'),stats:!!stats_,disk:!!disk};
   return {...Advisor.advise({docker,projects,containers,vm,host:memory?{memory}:null,keepRunning:workspace.keepRunning,portEntries:entries,disk:disk?.value||null,
-    activity:Advisor.projectActivity(projects,activityHistory,Date.now(),IDLE_MINUTES),idleMinutes:IDLE_MINUTES}),diskPending:!disk};
+    activity:Advisor.projectActivity(projects,activityHistory,Date.now(),IDLE_MINUTES),idleMinutes:IDLE_MINUTES,parts}),
+    parts,checkedAt,statsAt:stats_?new Date(stats_.at).toISOString():null,diskAt:disk?disk.value.generatedAt:null};
 }
 const diskReport = cached(60000, async()=>{
   const [{stdout},{snapshot}]=await Promise.all([docker(['system','df','-v','--format','{{json .}}'],{timeout:90000}),currentProjects(10000)]);
@@ -284,7 +320,7 @@ async function composeConfig(p) {
   return {services:Object.entries(cfg.services||{}).map(([service,s])=>({service,ports:(s.ports||[]).map(x=>({ip:A.normalizeIp(x.host_ip),port:Number(x.published),proto:x.protocol||'tcp'})).filter(x=>Number.isInteger(x.port)&&x.port>0)})),
     external:Object.values(cfg.networks||{}).filter(n=>n.external).map(n=>n.name)};
 }
-const portText=c=>A.msg(c.byProject?'preflight.portTaken':'preflight.portTakenStandalone',{port:c.ip==='0.0.0.0'?String(c.port):`${c.ip}:${c.port}`,service:c.service,container:c.by,project:c.byProject});
+const portText=A.portText;
 async function hostPortWarnings(targets,containers) {
   // Ports held by a running container are reported from Docker metadata; a listener on any other port is a non-Docker process.
   const held=new Set(containers.filter(c=>c.state==='running').flatMap(c=>c.ports.map(b=>b.port)));
@@ -339,6 +375,20 @@ async function planItem(action,p,ctx) {
   }
   return item;
 }
+// Container actions use plain `docker start|stop|restart <id>`, like Docker Desktop: they touch that
+// one container, and stop still honours the grace period Compose stored on it.
+const CONTAINER_ACTIONS=['start','stop','restart'];
+async function containerPlanFor(action,p,c,ctx) {
+  const item=A.containerPlan(action,p,c,ctx);
+  if(action==='start'&&!item.skip&&!item.errors.length){
+    item.warnings.push(...await hostPortWarnings([c],ctx.containers));
+    const home=os.homedir();
+    for(const src of new Set(c.binds))if(src.startsWith(home+path.sep)&&!fs.existsSync(src))item.warnings.push(A.msg('preflight.bindMissing',{path:src}));
+  }
+  return item;
+}
+// A project action and an action on one of its containers never run at the same time.
+const projectBusy=name=>operations.has(name)||[...operations].some(k=>k.startsWith(name+'/'));
 async function planFor(action,names) {
   if(!(await dockerInfo()).available)return {action,items:names.map(n=>({project:n,action,containers:[],warnings:[],errors:[A.msg('error.dockerOffline')],skip:false,info:''})),order:names};
   const {snapshot,projects}=await currentProjects(1000);
@@ -367,7 +417,7 @@ function publicJob(j) {return {id:j.id,action:j.action,state:j.state,items:j.ite
 async function runJob(job) {
   for(const item of job.items){
     if(job.cancel){item.status='cancelled';continue;}
-    if(operations.has(item.project)){item.status='failed';item.error=A.msg('error.busy');continue;}
+    if(projectBusy(item.project)){item.status='failed';item.error=A.msg('error.busy');continue;}
     operations.add(item.project);item.status='running';
     try{
       const {snapshot,projects}=await currentProjects(0),p=projects.find(x=>x.name===item.project);
@@ -413,7 +463,10 @@ const STATIC_FILES=['index.html','app.js','style.css','i18n.js','locales/vi.json
 function staticFile(req,res,urlPath){
   const target=urlPath==='/'?'index.html':urlPath.slice(1);
   if (!STATIC_FILES.includes(target)){res.writeHead(404);res.end();return;}
-  const content=fs.readFileSync(path.join(STATIC_DIR,target));
+  let content=fs.readFileSync(path.join(STATIC_DIR,target));
+  // The saved language goes into the page itself, so the first frame is already in that language
+  // whatever this browser stored for this address (localhost and a proxy domain do not share storage).
+  if(target==='index.html'){let lang='';try{lang=readWorkspace().language;}catch{}content=content.toString('utf8').replace('<html lang="vi"',`<html lang="${lang||'vi'}" data-saved-lang="${lang}"`);}
   res.writeHead(200,{'Content-Type':mime[path.extname(target)],'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'",'X-Content-Type-Options':'nosniff','Cache-Control':'no-cache'});
   res.end(content);
 }
@@ -426,14 +479,19 @@ async function route(req,res){
   if (pathname==='/api/state' && req.method==='GET')return respond(res,200,await stateView());
   if (pathname==='/api/projects' && req.method==='GET')return respond(res,200,{projects:readConfig()});
   if (pathname==='/api/advisor' && req.method==='GET'){
-    try{return respond(res,200,await advisorView());}catch(e){return fail(res,503,dockerError(e));}
+    const asked=new Set((url.searchParams.get('parts')||'health').split(',').filter(x=>['health','stats','disk'].includes(x)));
+    try{return respond(res,200,await advisorView(asked));}catch(e){return fail(res,503,dockerError(e));}
   }
+  if (pathname==='/api/measured' && req.method==='GET'){
+    try{return respond(res,200,await measuredView());}catch(e){return fail(res,503,dockerError(e));}
+  }
+  if (pathname==='/api/host' && req.method==='GET')return respond(res,200,await hostView());
   if (pathname==='/api/resources' && req.method==='GET'){
     try{return respond(res,200,await resourcesView());}catch(e){return fail(res,503,dockerError(e));}
   }
   if (pathname==='/api/disk' && req.method==='GET'){
     // `system df -v` takes seconds: never polled, and a forced refresh still reuses a result younger than 10s.
-    try{return respond(res,200,await diskReport(url.searchParams.get('refresh')==='1'?10000:60000));}catch(e){return fail(res,503,dockerError(e));}
+    try{const report=await diskReport(url.searchParams.get('refresh')==='1'?10000:60000);saveMeasurements();return respond(res,200,report);}catch(e){return fail(res,503,dockerError(e));}
   }
   if (pathname==='/api/ports' && req.method==='GET'){
     const check=[...new Set((url.searchParams.get('check')||'').split(/[\s,]+/).filter(Boolean).map(Number))];
@@ -467,6 +525,30 @@ async function route(req,res){
     const ps=readConfig();if(ps.some(x=>x.name===p.name))return fail(res,409,A.msg('error.projectExists'));
     ps.push(p);writeConfig(ps);return respond(res,201,{project:p});
   }
+  const one=pathname.match(/^\/api\/projects\/([a-zA-Z0-9_-]+)\/containers\/([0-9a-f]{12})\/(plan|start|stop|restart)$/);
+  if(one&&req.method==='POST'){
+    const [,name,id,verb]=one;
+    let b;try{b=await readBody(req);}catch(e){return fail(res,400,why(e));}
+    const action=verb==='plan'?b.action:verb;
+    if(!CONTAINER_ACTIONS.includes(action))return fail(res,400,A.msg('error.action',{actions:CONTAINER_ACTIONS}));
+    if(!(await dockerInfo()).available)return fail(res,503,A.msg('error.dockerOffline'));
+    const {snapshot,projects}=await currentProjects(1000),p=projects.find(x=>x.name===name),c=p?.containers.find(x=>x.id===id);
+    if(!p)return fail(res,404,A.msg('error.projectNotFound'));
+    if(!c)return fail(res,404,A.msg('error.containerNotFound'));
+    const ctx={containers:snapshot.containers,networks:snapshot.networks,keepRunning:readWorkspace().keepRunning};
+    if(verb==='plan'){const item=await containerPlanFor(action,p,c,ctx);return respond(res,200,{action,items:[item],order:[item.project]});}
+    const key=`${name}/${id}`;
+    if(operations.has(name)||operations.has(key))return fail(res,409,A.msg('error.busy'));
+    operations.add(key);
+    try{
+      const plan=A.containerPlan(action,p,c,ctx);
+      if(plan.errors.length)return fail(res,409,A.msg('error.preflight',{details:plan.errors}));
+      if(plan.skip)return respond(res,200,{ok:true,skipped:true,info:plan.info});
+      const {stdout,stderr}=await docker([action,c.id],{timeout:120000});
+      return respond(res,200,{ok:true,output:(stdout+'\n'+stderr).trim().slice(-2000)});
+    }
+    catch(e){return fail(res,503,dockerError(e));}finally{operations.delete(key);dockerSnapshot.invalidate();}
+  }
   const match=pathname.match(/^\/api\/projects\/([a-zA-Z0-9_-]+)(?:\/(\w+))?$/);
   if(match){
     const [,name,action]=match;
@@ -498,7 +580,7 @@ async function route(req,res){
       catch(e){return fail(res,500,dockerError(e));}
     }
     if(req.method==='POST' && ACTIONS[action]){
-      if(operations.has(name))return fail(res,409,A.msg('error.busy'));
+      if(projectBusy(name))return fail(res,409,A.msg('error.busy'));
       if(['up','down'].includes(action)&&!p.managed)return fail(res,400,A.msg('error.needsImport',{action}));
       if(action==='down'){
         const b=await readBody(req).catch(()=>({}));if(b.confirm!==`down ${name}`)return fail(res,400,A.msg('error.confirm',{phrase:`down ${name}`}));
@@ -522,5 +604,6 @@ function startServer(port=PORT){
   server.listen(port,HOST,()=>console.log(`Docker Dev Manager: http://localhost:${server.address().port}\nConfig: ${CONFIG_FILE}`));
   return server;
 }
+loadMeasurements();
 if(require.main===module)startServer();
-module.exports={validProject,validWorkspace,validBatch,readConfig,writeConfig,readWorkspace,writeWorkspace,startServer,authorization,discoverFromInspect,mergeManaged,planItem};
+module.exports={loadMeasurements,validProject,validWorkspace,validBatch,readConfig,writeConfig,readWorkspace,writeWorkspace,startServer,authorization,discoverFromInspect,mergeManaged,planItem};

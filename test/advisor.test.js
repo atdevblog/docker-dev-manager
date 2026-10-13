@@ -100,3 +100,17 @@ test('actions are ranked by severity: broken now, then memory pressure relief, t
  assert.ok(r.health.findings.some(f=>f.rule==='hostPressureWarning'),'but it still counts in the score');
  assert.deepEqual(r.waste.map(w=>w.kind),['churn','disk']);
 });
+test('each box shows only what its own measurement found',()=>{
+ const ps=projects([{name:'clam',project:'av',state:'exited',oom:true,policy:'unless-stopped',mem:256*1024**2},{name:'web',id:'shopweb',project:'shop'},{name:'api',id:'erpapi',project:'erp',restarts:12}]);
+ const containers=[{id:id('shopweb'),project:'shop',service:'web',memBytes:3.6*1024**3,cpuPercent:4},{id:id('erpapi'),project:'erp',service:'api',memBytes:1,cpuPercent:9}];
+ const disk=A.diskReport({BuildCache:[{InUse:'false',Shared:'false',Size:'16GB',LastUsedAt:'2020-01-01 00:00:00 +0000 UTC'}],Images:[],Containers:[],Volumes:[]});
+ const base={docker:ON,projects:ps,containers,host:{memory:{pressure:'warning'}},vm:{memTotal:8*1024**3},disk,activity:new Map()};
+ const only=parts=>V.advise({...base,parts:{health:false,stats:false,disk:false,...parts}});
+ // Health alone: problems and their fixes, no memory, CPU or disk suggestions.
+ assert.deepEqual(only({health:true}).actions.map(a=>a.kind),['crashloop','hostPressureWarning','oomPast']);assert.deepEqual(only({health:true}).waste,[]);
+ // Stats alone: CPU burnt by the crash loop and memory relief, but no health findings as actions.
+ const stats=only({stats:true});assert.deepEqual(stats.waste.map(w=>w.kind),['churn']);assert.deepEqual(stats.actions.map(a=>a.kind),['stopForMemory','stopForMemory']);
+ assert.deepEqual(only({health:true}).keep,[],'what to keep running needs memory figures');
+ // Disk alone: cleanup only, and the reclaimable total.
+ const d=only({disk:true});assert.deepEqual(d.actions.map(a=>a.kind),['pruneCacheOld']);assert.deepEqual(d.waste.map(w=>w.kind),['disk']);assert.ok(d.totals.diskBytes>0);assert.deepEqual(d.keep,[]);
+});

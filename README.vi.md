@@ -2,13 +2,15 @@
 
 [English](README.md) · **Tiếng Việt**
 
-Dashboard web chạy trên máy để quản lý các dự án Docker Compose. Nó tự tìm mọi dự án, chấm điểm sức khỏe Docker và cho biết việc nào cần làm trước, khởi động và dừng dự án (từng dự án hoặc theo nhóm), giải thích vì sao một dự án không chạy, và giúp bạn giải phóng bộ nhớ, chọn port trống, dọn ổ đĩa an toàn. Công cụ bổ trợ cho Docker Desktop chứ không thay thế nó.
+Dashboard web chạy trên máy để quản lý các dự án Docker Compose. Nó tự tìm mọi dự án, khởi động và dừng cả dự án, cả nhóm hoặc từng container (giống Docker Desktop), giải thích vì sao một thứ không chạy, chấm điểm sức khỏe Docker và cho biết việc nào cần làm trước. Nó cũng giúp bạn giải phóng bộ nhớ, chọn port trống và dọn ổ đĩa an toàn. Công cụ bổ trợ cho Docker Desktop chứ không thay thế nó.
 
 ![Docker Dev Manager](docs/images/vi-overview.png)
 
 - **Không cần cài đặt gì thêm:** chỉ cần Node.js, không có dependency npm, không cần database.
 - **Dùng ngay với dự án sẵn có:** tự phát hiện qua label của Docker, không cần import, không di chuyển file nào.
 - **An toàn mặc định:** mọi thao tác đều được kiểm tra trước; không có gì bị xóa hay dừng tự động.
+- **Nhẹ mặc định:** khoảng 15 MB RAM và không tốn CPU khi để yên. Khi tab đang hiện, nó cập nhật danh sách dự án mỗi 15 giây (dưới 1% của một nhân CPU) và tạm dừng khi tab bị ẩn. Những gì tốn vài giây xử lý của Docker chỉ chạy khi bạn bấm nút trên đúng thẻ của nó.
+- **Ghi nhớ:** ngôn ngữ và kết quả đo gần nhất vẫn còn sau khi reload hay khởi động lại.
 - **Giao diện Tiếng Việt / English.**
 
 📖 **[Hướng dẫn sử dụng](docs/guide.vi.md)** · [User guide](docs/guide.en.md)
@@ -17,7 +19,7 @@ Dashboard web chạy trên máy để quản lý các dự án Docker Compose. N
 
 - Node.js **20 trở lên**
 - Docker Desktop, hoặc Docker Engine kèm plugin `docker compose` v2, đang chạy
-- macOS hoặc Linux. Việc mở thư mục bằng Finder/Terminal/VS Code và thẻ bộ nhớ "Máy Mac này" dùng công cụ của macOS; các phần còn lại chạy được trên Linux.
+- macOS hoặc Linux. Việc mở thư mục bằng Finder/Terminal/VS Code và thẻ *Bộ nhớ máy Mac* dùng công cụ của macOS; các phần còn lại chạy được trên Linux.
 
 ## Cài đặt và chạy
 
@@ -32,8 +34,8 @@ Mở **http://localhost:4173**. Tắt bằng `Ctrl+C`.
 | Biến môi trường | Mặc định | Công dụng |
 |---|---|---|
 | `DEV_MANAGER_PORT` | `4173` | Port của dashboard (luôn chỉ bind `127.0.0.1`) |
-| `DEV_MANAGER_CONFIG_DIR` | `~/.config/docker-dev-manager` | Nơi lưu cài đặt |
-| `DEV_MANAGER_IDLE_MINUTES` | `15` | Thời gian một dự án đang chạy phải im lặng (không traffic mạng, CPU < 1%) trước khi được coi là nhàn rỗi |
+| `DEV_MANAGER_CONFIG_DIR` | `~/.config/docker-dev-manager` | Nơi lưu cài đặt và kết quả đo gần nhất |
+| `DEV_MANAGER_IDLE_MINUTES` | `15` | Khoảng cách tối thiểu giữa hai lần đo RAM/CPU để một dự án im lặng (không traffic mạng, CPU < 1%) được coi là nhàn rỗi |
 
 Ví dụ: `DEV_MANAGER_PORT=4174 npm start`. Muốn dashboard vẫn chạy sau khi đóng terminal, dùng trình quản lý tiến trình quen thuộc của bạn, hoặc `nohup npm start >/tmp/docker-dev-manager.log 2>&1 &`.
 
@@ -41,11 +43,12 @@ Ví dụ: `DEV_MANAGER_PORT=4174 npm start`. Muốn dashboard vẫn chạy sau k
 
 | | |
 |---|---|
-| **Tổng quan trong một hàng** | Năm thẻ ở đầu trang: điểm sức khỏe Docker, số dự án đang chạy, RAM container so với giới hạn của Docker VM, bộ nhớ máy Mac kèm áp lực bộ nhớ và swap, và dung lượng ổ đĩa thu hồi được. Bấm vào thẻ để đến phần chi tiết. |
-| **Sức khỏe & tư vấn tài nguyên** | Ba cột trả lời *Docker đang có vấn đề gì*, *lãng phí ở đâu* và *nên làm gì ngay*. Điểm sức khỏe chỉ gồm các khoản trừ có giải thích. Việc cần làm được xếp theo mức **Khẩn cấp → Quan trọng → Nên làm → Tối ưu**, việc nghiêm trọng nhất lên đầu, mỗi việc kèm ước tính RAM/ổ đĩa giải phóng và mức rủi ro. |
-| **Dự án** | Xem mọi dự án Compose cùng trạng thái, RAM và vấn đề. Khởi động, dừng, khởi động lại và xem nhật ký mà không cần import. |
+| **Tổng quan trong một hàng** | Năm thẻ: điểm sức khỏe Docker, số dự án đang chạy, RAM container so với giới hạn của Docker VM, bộ nhớ máy Mac kèm áp lực bộ nhớ và swap, và ổ đĩa thu hồi được. Ba thẻ có nút riêng: **Kiểm tra** trên *Sức khỏe Docker* (~0,5 giây), **Đo** trên *RAM container* (~2 giây) và **Phân tích** trên *Ổ đĩa thu hồi được* (~4 giây); hai thẻ còn lại tự cập nhật. Bấm vào thẻ để đến phần chi tiết. |
+| **Sức khỏe & tư vấn tài nguyên** | Ba cột dựng từ những gì bạn đã đo trên các thẻ: *Docker đang có vấn đề gì*, *lãng phí ở đâu* và *nên làm gì ngay*. Điểm sức khỏe chỉ gồm các khoản trừ có giải thích. Việc cần làm được xếp theo mức **Khẩn cấp → Quan trọng → Nên làm → Tối ưu**, việc nghiêm trọng nhất lên đầu, mỗi việc kèm ước tính RAM/ổ đĩa giải phóng và mức rủi ro. |
+| **Dự án** | Mọi dự án Compose cùng trạng thái, RAM và vấn đề. Khởi động, dừng, khởi động lại và xem nhật ký mà không cần import. |
+| **Từng container** | Mở danh sách container trên thẻ dự án để khởi động, dừng, khởi động lại hoặc xem nhật ký của riêng một container, giống Docker Desktop. Mỗi trạng thái có màu, biểu tượng và chữ riêng: đang chạy, tạm dừng, đã dừng, lỗi (kèm mã thoát), đang khởi động lại. RAM/CPU và port trên máy (bấm để mở trong trình duyệt) hiện theo từng container. |
 | **Vì sao không chạy** | Crash loop, mã thoát được giải thích dễ hiểu, bị kill vì hết bộ nhớ, container unhealthy, lỗi khởi động, mỗi dòng có nút mở nhật ký. |
-| **Thao tác an toàn** | Kiểm tra trước khi chạy: port bị container khác chiếm sẽ chặn thao tác, và các dự án phụ thuộc nhau qua network dùng chung được chỉ ra. |
+| **Thao tác an toàn** | Kiểm tra trước khi chạy: port bị container khác chiếm sẽ chặn thao tác, và những gì phụ thuộc nhau (qua network dùng chung hoặc `depends_on`) được chỉ ra trước khi bạn dừng. |
 | **Nhóm từ Docker** | Khi một dự án dùng network của dự án khác (ví dụ ứng dụng và stack database hoặc proxy của nó), chúng tự thành một nhóm. Khởi động hoặc dừng cả nhóm chỉ với một thao tác, đúng thứ tự phụ thuộc, có bước xem lại trước. |
 | **Giải phóng bộ nhớ** | Các dự án đang chạy sắp theo bộ nhớ, kèm ghi chú nếu dừng chúng sẽ làm hỏng gì. Hạ tầng dùng chung có thể đánh dấu *luôn chạy*. |
 | **Port** | Port nào trên máy đã bị chiếm, port nào được dự án đã dừng giữ chỗ, và port trống gần nhất. |
@@ -57,7 +60,7 @@ Ví dụ: `DEV_MANAGER_PORT=4174 npm start`. Muốn dashboard vẫn chạy sau k
 
 <table>
 <tr>
-<td width="50%"><b>Dự án và nhóm từ Docker</b><br><img src="docs/images/vi-projects.png" alt="Thẻ dự án kèm vấn đề và nhóm"></td>
+<td width="50%"><b>Dự án, container và nhóm</b><br><img src="docs/images/vi-projects.png" alt="Thẻ dự án mở danh sách container, màu trạng thái và nhóm"></td>
 <td width="50%"><b>Giải phóng bộ nhớ</b><br><img src="docs/images/vi-memory.png" alt="Dự án đang chạy sắp theo bộ nhớ"></td>
 </tr>
 <tr>
@@ -80,7 +83,9 @@ Cài đặt được lưu ở `~/.config/docker-dev-manager/projects.json`. File
 }
 ```
 
-File được ghi atomic với quyền `0600`, giữ nguyên các key khác. File bị hỏng không bao giờ bị ghi đè.
+File được ghi atomic với quyền `0600`, giữ nguyên các key khác. File bị hỏng không bao giờ bị ghi đè. Ngôn ngữ đã lưu áp dụng trên mọi địa chỉ bạn dùng để mở dashboard (localhost hoặc tên miền cục bộ).
+
+Kết quả đo gần nhất (kiểm tra sức khỏe, `docker stats`, `docker system df -v`) được lưu cạnh đó trong `measurements.json`. Sau khi reload hay khởi động lại, chúng hiện lại kèm giờ đo; chỉ phần kiểm tra sức khỏe tự chạy lại. Kết quả cũ hơn 7 ngày bị bỏ qua, và bạn có thể xóa file này bất cứ lúc nào.
 
 ## Bảo mật
 
@@ -113,13 +118,15 @@ server {
 | *Không thể kết nối Docker Engine* | Mở Docker Desktop rồi bấm **Làm mới**. |
 | Thiếu một dự án | Chỉ phát hiện được dự án còn container. Bấm **Quét Docker**, hoặc **Thêm thủ công**. |
 | Báo `EADDRINUSE` khi chạy | Port 4173 đã bị dùng: `DEV_MANAGER_PORT=4174 npm start`. |
-| Không có số liệu CPU/RAM | Kiểm tra `docker stats --no-stream` có chạy được trong terminal không. |
+| Không có số liệu CPU/RAM | Số liệu chỉ đo khi bạn yêu cầu: bấm **Đo** trên thẻ *RAM container*. Nếu vẫn trống, kiểm tra `docker stats --no-stream` có chạy được trong terminal không. |
+| Số liệu trông cũ sau khi reload | Đó là kết quả đo gần nhất, kèm giờ đo. Bấm **↻** trên thẻ để đo lại. |
+| Máy chậm khi mở dashboard | Bản thân dashboard chỉ dùng dưới 1% của một nhân CPU. Hãy xem thẻ *Bộ nhớ máy Mac*: swap lớn hoặc cảnh báo áp lực bộ nhớ thường là nguyên nhân, và **Đo** trên thẻ *RAM container* cho biết nên dừng dự án nào trước. |
 
 ## Phát triển
 
 ```
-server.js            HTTP server, gọi Docker CLI, kiểm tra trước, tác vụ nền
-lib/analysis.js      luật thuần: gom nhóm, vấn đề, phụ thuộc, port, tài nguyên, ổ đĩa
+server.js            HTTP server, gọi Docker CLI, kiểm tra trước, tác vụ nền, lưu kết quả đo
+lib/analysis.js      luật thuần: gom nhóm, vấn đề, phụ thuộc, port, tài nguyên, ổ đĩa, kiểm tra trước cho container
 lib/advisor.js       điểm sức khỏe, lãng phí và khuyến nghị xếp theo thứ tự
 public/              trang web (index.html, app.js, style.css), i18n.js, locales/, icon
 assets/icons/        file nguồn icon; build.sh tạo lại favicon.ico và apple-touch-icon.png
@@ -131,8 +138,10 @@ test/                các bộ test node:test
 - `npm run test:docker` là test tùy chọn trên Docker Engine thật. Nó tạo các dự án tạm `ddmit*` (image `nginx:alpine`, port 47391) rồi xóa sau khi xong.
 - **Chữ và ngôn ngữ:** mọi chuỗi hiển thị nằm trong `public/locales/en.json` và `vi.json`; server gửi thông điệp `{key, params}`, không bao giờ gửi câu hoàn chỉnh. Thêm key vào cả hai file và tham chiếu bằng literal (`t('nhom.key')`, `A.msg('nhom.key', …)` hoặc `data-i18n="nhom.key"`). `npm test` sẽ báo lỗi khi key bị thiếu, không dùng hoặc không khớp.
 - **Cách thao tác chạy:**
-  - Khởi động, Dừng, Khởi động lại và Nhật ký dùng `docker compose -p <tên> <lệnh>` dựa trên label của container. Cách này không cần file Compose và giữ đúng thứ tự `depends_on`. Lệnh chạy trong một thư mục rỗng để Compose không nạp nhầm file của dự án khác.
+  - Khởi động, Dừng, Khởi động lại và Nhật ký của cả dự án dùng `docker compose -p <tên> <lệnh>` dựa trên label của container. Cách này không cần file Compose và giữ đúng thứ tự `depends_on`. Lệnh chạy trong một thư mục rỗng để Compose không nạp nhầm file của dự án khác.
+  - Khởi động, Dừng và Khởi động lại một container dùng `docker start|stop|restart <id>`: chỉ đúng container đó, giống Docker Desktop.
   - Up và Down dùng file Compose của dự án đã import.
+- **Cách phép đo chạy:** trang chỉ tự cập nhật danh sách dự án và bộ nhớ máy Mac. Kiểm tra sức khỏe, `docker stats` và `docker system df -v` mỗi thứ chạy theo yêu cầu riêng; `/api/advisor` chỉ tổng hợp các phần đã đo và không bao giờ tự chạy chúng.
 
 ## Giấy phép
 

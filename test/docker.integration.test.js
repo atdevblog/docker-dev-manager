@@ -75,6 +75,20 @@ test('real Docker: discovery, Docker-derived groups, preflight, label-mode actio
    assert.equal(logs.status,200);assert.match(logs.body.logs,/app up/);assert.doesNotMatch(logs.body.logs,/db up/);
    assert.equal((await get(`/api/projects/${APP}/logs?service=nope`)).status,400);
   });
+  await t.test('one container at a time, like Docker Desktop: dependents named, siblings untouched',async()=>{
+   const app=await project(APP),db=app.containers.find(c=>c.service==='db'),web=app.containers.find(c=>c.service==='app');
+   const url=(c,verb)=>`/api/projects/${APP}/containers/${c.id}/${verb}`,state=(p,s)=>p.containers.find(c=>c.service===s);
+   const stopPlan=(await post(url(db,'plan'),{action:'stop'})).body.items[0];
+   assert.deepEqual(stopPlan.containers,['db']);assert.match(text(stopPlan.warnings),/app depends on db/);
+   const stopped=await post(url(db,'stop'));assert.equal(stopped.status,200,stopped.body.error);
+   let now=await project(APP);assert.equal(state(now,'db').state,'exited');assert.equal(state(now,'app').state,'running');
+   const restarted=await post(url(web,'restart'));assert.equal(restarted.status,200,restarted.body.error);
+   now=await project(APP);assert.notEqual(state(now,'app').startedAt,state(app,'app').startedAt);assert.equal(state(now,'db').state,'exited','a container restart never starts its dependencies');
+   assert.equal((await post(url(db,'restart'))).body.skipped,true);
+   assert.match(text((await post(url(web,'plan'),{action:'start'})).body.items[0].info),/Already running/);
+   assert.equal((await post(url(db,'start'))).status,200);assert.equal((await project(APP)).running,2);
+   assert.equal((await post(`/api/projects/${APP}/containers/000000000000/stop`)).status,404);
+  });
   await t.test('cancel leaves the remaining projects untouched',async()=>{
    const created=await post('/api/batch',{action:'stop',projects:[FLEET,APP]});
    await post(`/api/jobs/${created.body.job.id}/cancel`);
@@ -87,7 +101,10 @@ test('real Docker: discovery, Docker-derived groups, preflight, label-mode actio
    const crash=await project(CRASH);
    assert.ok(crash.issues.some(i=>i.kind==='crashloop'&&i.service==='loop'),JSON.stringify(crash.issues));
    assert.ok(crash.issues.some(i=>i.kind==='exited'&&i.service==='oneshot'&&/code 2/.test(text(i.text))));
-   const adv=(await get('/api/advisor')).body;
+   // Each box measures on its own: stats first, then the advisor combines what has been measured.
+   assert.ok((await get('/api/resources')).body.containers.some(c=>c.project===CRASH));
+   const adv=(await get('/api/advisor?parts=health,stats')).body;
+   assert.deepEqual(adv.parts,{health:true,stats:true,disk:false});assert.ok(adv.waste.some(w=>w.kind==='churn'&&/loop/.test(text(w.text))));
    assert.ok(adv.health.findings.some(f=>f.rule==='crashloop'&&f.project===CRASH&&f.points===15),'crash loop deducts 15 points');
    assert.ok(adv.health.score<=85);
    const start=adv.actions.find(a=>a.kind==='startStopped'&&a.action.projects[0]===CRASH);

@@ -2,13 +2,15 @@
 
 **English** · [Tiếng Việt](README.vi.md)
 
-A local web dashboard for the Docker Compose projects on your computer. It finds every project automatically, scores Docker's health and tells you what to fix first, starts and stops projects (one by one or in groups), explains why a project is not running, and helps you free memory, pick free ports and clean disk space safely. It complements Docker Desktop rather than replacing it.
+A local web dashboard for the Docker Compose projects on your computer. It finds every project automatically, starts and stops whole projects, groups or single containers (like Docker Desktop), explains why something is not running, scores Docker's health and tells you what to fix first. It also helps you free memory, pick free ports and clean disk space safely. It complements Docker Desktop rather than replacing it.
 
 ![Docker Dev Manager](docs/images/en-overview.png)
 
 - **Zero setup**: Node.js only, no npm dependencies, no database.
 - **Works with existing projects**: discovered from Docker labels, with no import step and no files moved.
 - **Safe by default**: every action is checked first; nothing is deleted or stopped automatically.
+- **Light by default**: about 15 MB of RAM and no CPU at rest. While its tab is visible it refreshes the project list every 15 seconds (under 1% of one CPU core) and pauses when the tab is hidden. Anything that costs Docker seconds of work runs only when you click the button on its card.
+- **Remembers**: your language and the last measurements stay after a reload or a restart.
 - **Vietnamese / English** interface.
 
 📖 **[User guide](docs/guide.en.md)** · [Hướng dẫn sử dụng](docs/guide.vi.md)
@@ -17,7 +19,7 @@ A local web dashboard for the Docker Compose projects on your computer. It finds
 
 - Node.js **20 or newer**
 - Docker Desktop, or Docker Engine with the `docker compose` v2 plugin, running
-- macOS or Linux. Opening folders in Finder/Terminal/VS Code and the "This Mac" memory card use macOS tools; everything else works on Linux.
+- macOS or Linux. Opening folders in Finder/Terminal/VS Code and the *Mac memory* card use macOS tools; everything else works on Linux.
 
 ## Install and run
 
@@ -32,8 +34,8 @@ Open **http://localhost:4173**. Stop it with `Ctrl+C`.
 | Variable | Default | Purpose |
 |---|---|---|
 | `DEV_MANAGER_PORT` | `4173` | Port of the dashboard (always bound to `127.0.0.1`) |
-| `DEV_MANAGER_CONFIG_DIR` | `~/.config/docker-dev-manager` | Where settings are saved |
-| `DEV_MANAGER_IDLE_MINUTES` | `15` | How long a running project must stay quiet (no network traffic, CPU < 1%) before the advisor calls it idle |
+| `DEV_MANAGER_CONFIG_DIR` | `~/.config/docker-dev-manager` | Where settings and the last measurements are saved |
+| `DEV_MANAGER_IDLE_MINUTES` | `15` | Minimum gap between two RAM/CPU measurements for the advisor to call a quiet project (no network traffic, CPU < 1%) idle |
 
 Example: `DEV_MANAGER_PORT=4174 npm start`. To keep it running after closing the terminal, use your usual process manager, or `nohup npm start >/tmp/docker-dev-manager.log 2>&1 &`.
 
@@ -41,11 +43,12 @@ Example: `DEV_MANAGER_PORT=4174 npm start`. To keep it running after closing the
 
 | | |
 |---|---|
-| **Overview at a glance** | Five tiles at the top: Docker health score, running projects, RAM used by containers against the Docker VM limit, this Mac's memory with pressure and swap, and the disk space that can be reclaimed. Click a tile to jump to its details. |
-| **Health & resource advisor** | Three columns answer *what is wrong*, *where resources are wasted* and *what to do now*. The health score is made only of explained deductions. Actions are ranked **Urgent → Important → Recommended → Optional**, most serious first, each with estimated RAM/disk gain and risk. |
-| **Projects** | See every Compose project with its status, RAM and problems. Start, stop, restart and read logs without importing anything. |
+| **Overview at a glance** | Five cards: Docker health score, running projects, container RAM against the Docker VM limit, this Mac's memory with pressure and swap, and reclaimable disk. Three of them have their own button: **Check** on *Docker health* (~0.5 s), **Measure** on *Container RAM* (~2 s) and **Analyze** on *Reclaimable disk* (~4 s); the other two update by themselves. Click a card to jump to its details. |
+| **Health & resource advisor** | Three columns built from what you measured on the cards: *what is wrong*, *where resources are wasted* and *what to do now*. The health score is made only of explained deductions. Actions are ranked **Urgent → Important → Recommended → Optional**, most serious first, each with estimated RAM/disk gain and risk. |
+| **Projects** | Every Compose project with its status, RAM and problems. Start, stop, restart and read logs without importing anything. |
+| **One container at a time** | Open a card's container list to start, stop, restart or read the logs of a single container, like Docker Desktop. Each state has its colour, icon and words: running, paused, stopped, failed (with its exit code), restarting. RAM/CPU and host ports (one click opens them in the browser) are shown per container. |
 | **Why it is not running** | Crash loops, exit codes in plain words, out-of-memory kills, unhealthy containers and failed starts, each with a one-click log. |
-| **Safe actions** | Checks before running: ports taken by another container block the start, and projects that depend on each other through a shared network are pointed out. |
+| **Safe actions** | Checks before running: a port taken by another container blocks the start, and what depends on what (through a shared network or `depends_on`) is pointed out before you stop it. |
 | **Groups from Docker** | When a project joins another project's network (an app and its database or proxy stack), they form a group automatically. Start or stop the group in one click, in dependency order, with a review first. |
 | **Free up memory** | Running projects sorted by memory, with notes on what stopping them would break. Shared infrastructure can be marked *keep running*. |
 | **Ports** | Which host ports are taken, which are reserved by stopped projects, and the nearest free ones. |
@@ -57,7 +60,7 @@ Example: `DEV_MANAGER_PORT=4174 npm start`. To keep it running after closing the
 
 <table>
 <tr>
-<td width="50%"><b>Projects and groups from Docker</b><br><img src="docs/images/en-projects.png" alt="Project cards with problems and groups"></td>
+<td width="50%"><b>Projects, containers and groups</b><br><img src="docs/images/en-projects.png" alt="Project cards with an open container list, state colours and groups"></td>
 <td width="50%"><b>Free up memory</b><br><img src="docs/images/en-memory.png" alt="Running projects sorted by memory"></td>
 </tr>
 <tr>
@@ -80,7 +83,9 @@ Settings are saved in `~/.config/docker-dev-manager/projects.json`. The file is 
 }
 ```
 
-Writes are atomic with mode `0600`, and keys are preserved. A corrupt file is never overwritten.
+Writes are atomic with mode `0600`, and keys are preserved. A corrupt file is never overwritten. The saved language applies on every address you open the dashboard with (localhost or a local domain).
+
+The last measurements (health check, `docker stats`, `docker system df -v`) are kept next to it in `measurements.json`. After a reload or a restart they come back with their time; only the health check runs again by itself. Results older than 7 days are ignored, and the file can be deleted at any time.
 
 ## Security
 
@@ -113,13 +118,15 @@ server {
 | *Unable to connect to Docker Engine* | Start Docker Desktop, then click **Refresh**. |
 | A project is not listed | Only projects that still have containers are discovered. Click **Scan Docker**, or **Add manually**. |
 | `EADDRINUSE` on start | Port 4173 is taken: `DEV_MANAGER_PORT=4174 npm start`. |
-| No CPU/RAM figures | Check that `docker stats --no-stream` works in a terminal. |
+| No CPU/RAM figures | They are measured on demand: click **Measure** on the *Container RAM* card. If they stay empty, check that `docker stats --no-stream` works in a terminal. |
+| Figures look old after a reload | They are the last measurements, shown with their time. Click **↻** on the card to measure again. |
+| The Mac feels slow with the dashboard open | The dashboard itself stays below 1% of one core. Look at the *Mac memory* card instead: heavy swap or a memory pressure warning is the usual cause, and **Measure** on *Container RAM* shows which project to stop first. |
 
 ## Development
 
 ```
-server.js            HTTP server, Docker CLI calls, preflight checks, background jobs
-lib/analysis.js      pure rules: grouping, problems, dependencies, ports, resources, disk
+server.js            HTTP server, Docker CLI calls, preflight checks, background jobs, saved measurements
+lib/analysis.js      pure rules: grouping, problems, dependencies, ports, resources, disk, container preflight
 lib/advisor.js       health score, waste and ranked recommendations
 public/              page (index.html, app.js, style.css), i18n.js, locales/, icons
 assets/icons/        icon sources; build.sh regenerates favicon.ico and apple-touch-icon.png
@@ -131,8 +138,10 @@ test/                node:test suites
 - `npm run test:docker` runs an optional test against the real Docker Engine. It creates throwaway `ddmit*` projects (image `nginx:alpine`, port 47391) and removes them afterwards.
 - **Text and languages**: every visible string lives in `public/locales/en.json` and `vi.json`; the server sends `{key, params}` messages, never sentences. Add a key to both files and reference it as a literal (`t('section.key')`, `A.msg('section.key', …)` or `data-i18n="section.key"`). `npm test` fails on missing, unused or mismatched keys.
 - **How actions run**:
-  - Start, Stop, Restart and Logs use `docker compose -p <name> <command>` from container labels. This needs no Compose file and keeps the `depends_on` order. It runs in an empty folder so Compose cannot pick up another project's file.
+  - A project's Start, Stop, Restart and Logs use `docker compose -p <name> <command>` from container labels. This needs no Compose file and keeps the `depends_on` order. It runs in an empty folder so Compose cannot pick up another project's file.
+  - One container's Start, Stop and Restart use `docker start|stop|restart <id>`: only that container, like Docker Desktop.
   - Up and Down use the imported project's Compose file.
+- **How measurements run**: the page polls only the project list and this Mac's memory. The health check, `docker stats` and `docker system df -v` each run on their own request; `/api/advisor` only combines the parts already measured and never starts them itself.
 
 ## License
 
