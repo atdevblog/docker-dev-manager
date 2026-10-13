@@ -10,16 +10,17 @@ Docker Dev Manager is a local web page for the Docker Compose projects on your c
 
 1. [Install and open](#1-install-and-open)
 2. [The screen at a glance](#2-the-screen-at-a-glance)
-3. [Start, stop, restart](#3-start-stop-restart)
-4. [Why is a project not running?](#4-why-is-a-project-not-running)
-5. [Read logs](#5-read-logs)
-6. [Groups from Docker](#6-groups-from-docker)
-7. [Free up memory](#7-free-up-memory)
-8. [Pick free ports](#8-pick-free-ports)
-9. [Clean disk space safely](#9-clean-disk-space-safely)
-10. [Import a project, Up and Down](#10-import-a-project-up-and-down)
-11. [Language](#11-language)
-12. [Questions and problems](#12-questions-and-problems)
+3. [Health & resource advisor](#3-health--resource-advisor)
+4. [Start, stop, restart](#4-start-stop-restart)
+5. [Why is a project not running?](#5-why-is-a-project-not-running)
+6. [Read logs](#6-read-logs)
+7. [Groups from Docker](#7-groups-from-docker)
+8. [Free up memory](#8-free-up-memory)
+9. [Pick free ports](#9-pick-free-ports)
+10. [Clean disk space safely](#10-clean-disk-space-safely)
+11. [Import a project, Up and Down](#11-import-a-project-up-and-down)
+12. [Language](#12-language)
+13. [Questions and problems](#13-questions-and-problems)
 
 ## 1. Install and open
 
@@ -39,11 +40,15 @@ There is nothing to install: the project has no npm dependencies. Open **http://
 
 - **Sidebar**: jump to Projects, Resources, Ports or Disk. The dot at the bottom shows whether Docker Engine is reachable.
 - **Header**: switch language (*Tiếng Việt / English*), **Refresh**, and **Add manually** for a project that has no containers yet.
-- **Overview cards**:
-  - *Docker containers*: RAM used by containers compared with the Docker Desktop VM size, and CPU in cores.
-  - *This Mac*: memory used (counted like Activity Monitor), swap, CPU and macOS memory pressure. The card turns amber or red when the Mac is short on memory.
+- **Overview cards** (click one to jump to the matching section):
+  - *Docker health*: the advisor's score out of 100 with its status (Healthy, Needs attention, Unhealthy), the number of problems and the Docker version. It turns red when Docker Engine is unreachable.
+  - *Running projects*: running out of total, with the number of containers and of projects that need attention.
+  - *Container RAM*: memory used by containers against the Docker Desktop VM size (with a meter), CPU in cores, and the largest project.
+  - *Mac memory*: memory used (counted like Activity Monitor) against the total, with a meter whose colour follows macOS memory pressure, plus swap and CPU. Heavy swap is highlighted when memory is short.
+  - *Reclaimable disk*: what can be cleaned safely, plus what needs review first.
 - **Filters**: All, Running, *Needs attention* (projects with problems), Managed, Discovered, plus a search box.
-- **Groups from Docker**: projects that belong together, detected automatically, with ▶ start and ■ stop (see [section 6](#6-groups-from-docker)).
+- **Health & resource advisor**: a health score, where resources are wasted and what to do now (see [section 3](#3-health--resource-advisor)).
+- **Groups from Docker**: projects that belong together, detected automatically, with ▶ start and ■ stop (see [section 6](#7-groups-from-docker)).
 - **Project cards**, one per Compose project found from Docker:
   - Status: *Running*, *Partly running*, *Stopped*.
   - *Discovered* means found automatically; *Managed* means you imported or added it (needed only for Up/Down).
@@ -51,9 +56,47 @@ There is nothing to install: the project has no npm dependencies. Open **http://
   - ★ *keep running* marks shared infrastructure you never want to stop by accident.
   - Red or amber lines explain problems, each with a **Log** link.
 
+Scroll down for the project cards:
+
+![Project cards](images/en-projects.png)
+
 Everything refreshes every 15 seconds while the page is visible.
 
-## 3. Start, stop, restart
+## 3. Health & resource advisor
+
+![Health & resource advisor](images/en-advisor.png)
+
+The advisor sits right under the overview cards and answers three questions. It refreshes every 30 seconds; **Re-check** updates it at once.
+
+**What is wrong?** The health score starts at 100. Each problem deducts a fixed number of points, never an opaque number, and every line shows the cause, the fix and a button (open the log, review and start, details…). Hover a line for Docker's own explanation. 90–100 is *Healthy*, 70–89 *Needs attention*, below 70 *Unhealthy*. *How the score works* lists every rule:
+
+| Problem | Points | Max |
+|---|---|---|
+| Docker Engine unreachable | −100 | |
+| Crash loop | −15 each | −45 |
+| Out of memory while running | −12 each | −36 |
+| Unhealthy container / failed to start | −10 each | −30 each |
+| Container at 90%+ of its own memory limit | −8 each | −24 |
+| Port conflict (a stopped container cannot start) / missing network | −6 each | −18 each |
+| Service down while the rest of its project runs | −5 each | −15 |
+| Out of memory in the last run | −4 each | −12 |
+| macOS memory pressure critical / warning | −20 / −8 | |
+| Docker VM memory 90%+ used | −10 | |
+
+**Where is waste?**
+- *Idle projects*: running, but with no network traffic and CPU under 1% for at least 15 minutes. Low CPU alone never makes a project idle. The dashboard only measures while its page is open, so right after opening it tells you how many minutes it still needs.
+- Containers burning CPU in a crash loop.
+- Disk Docker could give back (build cache, dangling and unused images, stopped containers, unused volumes), each with its safety level.
+
+**What to do now?** A ranked list, most serious first. Each action carries its level: **Urgent** (broken right now: crash loop, out of memory, failed start), **Important** (degraded service or memory pressure), **Recommended** (idle projects, past problems) and **Optional** (disk housekeeping). Each column keeps the same height and scrolls on its own, so the page does not jump when the advisor refreshes.
+- Each action shows the estimated gain (≈ RAM or disk), a risk level and a button. Start and stop buttons open the usual review window; nothing runs without it.
+- Idle projects are suggested together. A project they need (database, proxy) is added only when it is idle too and nothing else uses it. Under memory pressure (macOS warning or Docker VM 80%+), the largest projects are suggested as well, marked *Review first* because they are in use.
+- Disk: safe categories come with a command to copy; images and volumes open the Disk section. Volumes are never removed automatically.
+- **Keep running** lists the running projects that should stay, with the reason: marked keep running, used by another running project, in use, or not observed long enough yet.
+
+To change the idle threshold: `DEV_MANAGER_IDLE_MINUTES=30 npm start`.
+
+## 4. Start, stop, restart
 
 Use the buttons on each card:
 
@@ -72,7 +115,7 @@ Before every action the dashboard checks for problems. If everything is fine, it
 - Related projects appear **unticked**. Tick them if you want to include them; nothing outside your selection runs.
 - A project that other running projects still use, or that you marked *keep running*, is also left **unticked**, as in the example. Stopping it has to be a deliberate choice.
 
-## 4. Why is a project not running?
+## 5. Why is a project not running?
 
 The card already lists the most important problems. Click **Details** for the full picture:
 
@@ -90,7 +133,7 @@ The card already lists the most important problems. Click **Details** for the fu
 
 Containers with restart policy `unless-stopped` or `always` that are stopped were stopped on purpose, so they are not reported as problems.
 
-## 5. Read logs
+## 6. Read logs
 
 Click **Logs** on a card, or **Log** next to a problem to open that service directly.
 
@@ -102,7 +145,7 @@ Click **Logs** on a card, or **Log** next to a problem to open that service dire
 
 Log text is always shown exactly as Docker returns it.
 
-## 6. Groups from Docker
+## 7. Groups from Docker
 
 Docker already groups containers into Compose projects; each card is one project. Groups go one level up: they put together the **projects that need each other**. You don't create them, because they come from Docker.
 
@@ -117,7 +160,7 @@ When a project's containers join a network created by another project (an `exter
 
 Groups update by themselves when your Compose files change their networks.
 
-## 7. Free up memory
+## 8. Free up memory
 
 Open **Resources** in the sidebar, or click the *Docker containers* card.
 
@@ -130,7 +173,7 @@ Open **Resources** in the sidebar, or click the *Docker containers* card.
 
 Nothing is ever stopped automatically. Low CPU does not mean a project is unused, so the dashboard never calls it idle. **All running containers** shows the per-container figures.
 
-## 8. Pick free ports
+## 9. Pick free ports
 
 Open **Ports** before giving a new project its ports.
 
@@ -146,7 +189,7 @@ Open **Ports** before giving a new project its ports.
 
 Ports from 49152 up are assigned at random by macOS and are never suggested.
 
-## 9. Clean disk space safely
+## 10. Clean disk space safely
 
 Open **Disk** and click **Analyze disk** (it takes a few seconds).
 
@@ -160,7 +203,7 @@ Open **Disk** and click **Analyze disk** (it takes a few seconds).
 
 The dashboard never deletes anything itself.
 
-## 10. Import a project, Up and Down
+## 11. Import a project, Up and Down
 
 **Start**, **Stop**, **Restart** and **Logs** work for every project without importing it. You only need to import for:
 
@@ -175,11 +218,11 @@ To import, open **Details** and click **＋ Import project**. This is offered wh
 
 Up always shows a review first, and checks the Compose file and ports. Down asks for confirmation.
 
-## 11. Language
+## 12. Language
 
 Use **Tiếng Việt / English** in the header. The page switches instantly and remembers your choice, even after a restart. Names of projects, containers, paths, ports and log content are never translated.
 
-## 12. Questions and problems
+## 13. Questions and problems
 
 | Problem | What to do |
 |---|---|

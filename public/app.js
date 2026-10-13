@@ -1,7 +1,7 @@
 'use strict';
 const $=id=>document.getElementById(id);
 let token='',projects=[],groups=[],workspace={keepRunning:[],language:''},resources=null,editing=null,filter='all',busy=new Set(),logProject=null,rawLogs='',lastRefresh=0;
-let loaded=false,dockerState=null,lastPorts=null,lastDisk=null;
+let loaded=false,dockerState=null,lastPorts=null,lastDisk=null,advice=null;
 const selectedStops=new Set();
 const ERROR_LINE=/\b(error|err|fatal|exception|panic|critical|crit|fail(ed|ure)?|denied|refused|killed|oom|traceback|uncaught)\b/i;
 
@@ -35,7 +35,7 @@ function rerender(){
  if(!loaded)return;
  renderEngine();updateCounters();renderGroups();renderProjects();
  if(resources){renderSuggestions();renderStats();}else updateStopSelected();
- if(lastPorts)renderPortsData();if(lastDisk)renderDisk(lastDisk);
+ if(lastPorts)renderPortsData();if(lastDisk)renderDisk(lastDisk);if(advice)renderAdvisor();renderHealthTile();
 }
 // The choice lives in the config file (survives restarts, upgrades and other URLs such as a local
 // proxy domain) and in localStorage only to paint the first frame in the right language.
@@ -72,34 +72,56 @@ async function refresh(){
 }
 function renderEngine(){
  if(!dockerState)return;const online=dockerState.available;
- $('engineStatus').textContent=t(online?'engine.online':'engine.offline');$('engineStatus').style.color=online?'#3cd4a0':'#fc7b86';
- $('engineVersion').textContent=online?t('engine.version',{version:dockerState.version}):t('engine.startDesktop');
  $('dockerDot').classList.toggle('ok',online);$('dockerLabel').textContent=t(online?'engine.onlineLabel':'engine.offlineLabel');
  if(!online)alertMessage(dockerState.error?t('engine.offlineAlertDetail',{detail:dockerState.error.split('\n')[0]}):t('engine.offlineAlert'));
+ renderHealthTile();
+}
+// Stat tiles follow one contract: label, value, optional meter, then status (icon + words, never colour alone) and context.
+const STATUS_ICON={good:'●',fair:'▲',poor:'✕',normal:'●',warning:'▲',critical:'✕'};
+function setStatus(node,level,text){node.className='status '+level;node.replaceChildren(el('i','',STATUS_ICON[level]||'●'),document.createTextNode(text));}
+function setMeter(node,ratio,severity){const pct=Math.max(0,Math.min(100,Math.round(ratio*100)));node.className='meter '+severity;node.firstChild.style.width=pct+'%';node.setAttribute('aria-valuenow',String(pct));}
+function setValue(node,main,unit){node.replaceChildren(document.createTextNode(String(main)),...(unit?[el('small','',unit)]:[]));}
+function renderHealthTile(){
+ const status=$('healthStatus');
+ if(dockerState&&!dockerState.available){setValue($('healthValue'),0,'/100');setStatus(status,'poor',t('metric.engineOffline'));$('healthSub').textContent=t('engine.startDesktop');return;}
+ if(!advice){status.replaceChildren();return;}
+ const h=advice.health;setValue($('healthValue'),h.score,'/100');setStatus(status,h.grade,t(GRADE_KEYS[h.grade]));
+ $('healthSub').textContent=[h.findings.length?t('advisor.sumProblems',{count:h.findings.length}):t('advisor.sumHealthy'),dockerState?.version?t('engine.version',{version:dockerState.version}):''].filter(Boolean).join(' · ');
+ const disk=advice.waste.filter(w=>w.kind==='disk'),review=disk.filter(w=>w.risk==='review'||w.risk==='data').reduce((n,w)=>n+w.diskBytes,0);
+ if(advice.diskPending&&!disk.length){setValue($('reclaimValue'),'…');$('reclaimSub').textContent=t('advisor.diskPending');}
+ else{setValue($('reclaimValue'),advice.totals.diskBytes?'≈ '+fmtDisk(advice.totals.diskBytes):'0 B');
+  $('reclaimSub').textContent=[advice.totals.diskBytes?t('metric.reclaimSafe'):t('metric.reclaimNone'),review?t('metric.reclaimReview',{size:fmtDisk(review)}):''].filter(Boolean).join(' · ');}
 }
 async function scanDocker(){await refresh();toast(t('toast.scanned',{count:projects.filter(p=>p.total).length}));}
 function updateCounters(){
  if(!loaded)return;
  const running=projects.filter(p=>p.running>0);
- $('projectCount').textContent=projects.length;$('runningCount').textContent=running.length;$('containerCount').textContent=t('metric.containersRunning',{count:running.reduce((n,p)=>n+p.running,0)});
+ const containers=running.reduce((n,p)=>n+p.running,0),attention=projects.filter(hasProblem).length;
+ setValue($('runningCount'),running.length,` / ${projects.length}`);
+ $('containerCount').textContent=attention?t('metric.runningAttention',{containers,count:attention}):t('metric.containersRunning',{count:containers});
  $('allCount').textContent=projects.length;$('runningChip').textContent=running.length;$('issuesCount').textContent=projects.filter(hasProblem).length;
  $('managedCount').textContent=projects.filter(p=>p.managed).length;$('discoveredCount').textContent=projects.filter(p=>!p.managed).length;
  if(resources)renderOverview();
 }
-// Both cards express CPU in cores so the Docker share and the whole Mac compare directly.
+// Both memory tiles express CPU in cores so the Docker share and the whole Mac compare directly.
 function renderOverview(){
- const vm=resources.vm,tot=resources.totals,host=resources.host;
- $('memoryUsed').textContent=t('metric.ram',{size:fmtBytes(tot.memBytes)});
- $('memoryOf').textContent=vm.memTotal?t('metric.ofVm',{total:fmtBytes(vm.memTotal),pct:Math.round(tot.memBytes/vm.memTotal*100)}):t('metric.dockerVm');
- $('containerCpu').textContent=t('metric.cpuCores',{used:(tot.cpuPercent/100).toFixed(1),total:vm.ncpu||host?.cores||'?'});
- const card=$('hostMetric');card.classList.remove('warn','critical');
- if(!host){$('hostMem').textContent='—';$('hostMemOf').textContent=t('metric.hostUnavailable');$('hostCpu').textContent='';card.title='';return;}
- const m=host.memory,level=PRESSURE_KEYS[m.pressure]?t(PRESSURE_KEYS[m.pressure]):'',known=host.cpuPercent!=null;
- $('hostMem').textContent=t('metric.ram',{size:fmtBytes(m.used)});
- $('hostMemOf').textContent=[t('metric.ofHost',{total:fmtBytes(m.total)}),m.swap.used?t('metric.swap',{size:fmtBytes(m.swap.used)}):''].filter(Boolean).join(' · ');
- $('hostCpu').textContent=[t('metric.hostCpu',{pct:known?host.cpuPercent:'—',used:known?(host.cpuPercent*host.cores/100).toFixed(1):'—',total:host.cores}),level?t('metric.pressure',{level}):''].filter(Boolean).join(' · ');
- if(m.pressure==='warning'||m.pressure==='critical')card.classList.add(m.pressure);
- card.title=[t('metric.hostTitle',{cache:fmtBytes(m.cached),window:host.cpuWindowSec}),m.pressure&&m.pressure!=='normal'?t('metric.hostPressureTitle',{level}):''].filter(Boolean).join(' ');
+ const vm=resources.vm,tot=resources.totals,host=resources.host,cores=vm.ncpu||host?.cores||'?';
+ setValue($('memoryUsed'),fmtBytes(tot.memBytes));
+ const share=vm.memTotal?tot.memBytes/vm.memTotal:0;setMeter($('vmMeter'),share,share>=.9?'danger':share>=.7?'warning':'accent');
+ $('memoryOf').textContent=[vm.memTotal?t('metric.ofVm',{total:fmtBytes(vm.memTotal),pct:Math.round(share*100)}):t('metric.dockerVm'),t('metric.cpuCores',{used:(tot.cpuPercent/100).toFixed(1),total:cores})].join(' · ');
+ const top=[...resources.projects].sort((a,b)=>b.memBytes-a.memBytes)[0];
+ $('topConsumer').textContent=top?.memBytes?t('metric.topConsumer',{project:top.name,size:fmtBytes(top.memBytes)}):'';
+ const card=$('hostMetric');
+ if(!host){setValue($('hostMem'),'—');$('hostMemOf').textContent=t('metric.hostUnavailable');$('hostCpu').textContent='';$('hostPressure').replaceChildren();card.title='';return;}
+ const m=host.memory,level=PRESSURE_KEYS[m.pressure]?m.pressure:'',known=host.cpuPercent!=null;
+ setValue($('hostMem'),fmtBytes(m.used));
+ // macOS compresses and swaps before RAM looks full, so the meter's colour follows memory pressure, not the percentage.
+ setMeter($('hostMeter'),m.total?m.used/m.total:0,level==='critical'?'danger':level==='warning'?'warning':'accent');
+ if(level)setStatus($('hostPressure'),level,t('metric.pressureStatus',{level:t(PRESSURE_KEYS[level])}));else $('hostPressure').replaceChildren();
+ // Heavy swapping is the cause behind a pressure warning, so it takes the same colour.
+ $('hostMemOf').textContent=[t('metric.ofHost',{total:fmtBytes(m.total)}),m.swap.used?t('metric.swap',{size:fmtBytes(m.swap.used)}):''].filter(Boolean).join(' · ');$('hostMemOf').className=level==='critical'?'textdanger':level==='warning'?'textwarning':'';
+ $('hostCpu').textContent=t('metric.hostCpu',{pct:known?host.cpuPercent:'—',used:known?(host.cpuPercent*host.cores/100).toFixed(1):'—',total:host.cores});
+ card.title=[t('metric.hostTitle',{cache:fmtBytes(m.cached),window:host.cpuWindowSec}),m.pressure&&m.pressure!=='normal'?t('metric.hostPressureTitle',{level:t(PRESSURE_KEYS[m.pressure])}):''].filter(Boolean).join(' ');
 }
 function renderProjects(){
  if(!loaded)return;
@@ -153,7 +175,7 @@ async function runSingle(action,name,body){
  try{const data=await api(`/api/projects/${encodeURIComponent(name)}/${action}`,'POST',body||{});const last=data.output?.trim().split('\n').pop()||'',verb=t(VERB_KEYS[action]);
   toast(last?t('toast.doneOutput',{project:name,action:verb,output:last.slice(0,100)}):t('toast.done',{project:name,action:verb}));}
  catch(e){alertMessage(`${name}: ${e.message}`);}
- finally{busy.delete(name);await refresh();refreshResources();}
+ finally{busy.delete(name);await refresh();refreshResources();loadAdvisor();}
 }
 function showPlan(plan,title){
  const content=$('planContent'),run=$('planRun'),cancel=$('planCancel'),checks=new Map();content.replaceChildren();
@@ -191,7 +213,7 @@ async function runBatch(action,names){
  const count=s=>job.items.filter(i=>i.status===s).length;
  $('planSummary').textContent=t('plan.result',{done:count('done'),failed:count('failed'),skipped:count('skipped')+count('cancelled')});
  cancel.disabled=false;cancel.textContent=t('common.close');cancel.onclick=()=>$('planDialog').close();
- await refresh();refreshResources();
+ await refresh();refreshResources();loadAdvisor();
 }
 
 async function importProject(p){
@@ -281,6 +303,58 @@ function renderStats(){
  const tbody=$('statsRows');if(!resources.containers.length)return messageRow(tbody,t('resources.noContainers'),6);
  tbody.replaceChildren(...[...resources.containers].sort((a,b)=>b.cpuPercent-a.cpuPercent).map(c=>{const row=el('tr');[c.name,c.project||t('common.standalone'),c.cpu,c.memory,c.memoryPercent,c.netIO].forEach(v=>row.append(el('td','',v||'—')));return row;}));
 }
+
+// ---- Health & resource advisor: three answers, each item with its cause, gain, risk and one action ----
+const RULE_KEYS={engine:'advisor.rule.engine',crashloop:'advisor.rule.crashloop',oomLive:'advisor.rule.oomLive',unhealthy:'advisor.rule.unhealthy',startFailed:'advisor.rule.startFailed',memoryNearLimit:'advisor.rule.memoryNearLimit',portConflict:'advisor.rule.portConflict',missingNetwork:'advisor.rule.missingNetwork',partialDown:'advisor.rule.partialDown',oomPast:'advisor.rule.oomPast',hostPressureCritical:'advisor.rule.hostPressureCritical',hostPressureWarning:'advisor.rule.hostPressureWarning',vmMemoryHigh:'advisor.rule.vmMemoryHigh'};
+const GRADE_KEYS={good:'advisor.grade.good',fair:'advisor.grade.fair',poor:'advisor.grade.poor'};
+const RISK_KEYS={none:'advisor.riskLabel.none',low:'advisor.riskLabel.low',review:'advisor.riskLabel.review',data:'advisor.riskLabel.data'};
+const RISK_CLASS={none:'risksafe',low:'risksafe',review:'riskreview',data:'riskdata'};
+const BTN_KEYS={logs:'advisor.btn.logs',details:'advisor.btn.details',start:'advisor.btn.start',stop:'advisor.btn.stop',copy:'advisor.btn.copy',ports:'advisor.btn.ports',memory:'advisor.btn.memory',disk:'advisor.btn.disk',refresh:'advisor.btn.refresh'};
+const TIER_KEYS={1:'advisor.tier.urgent',2:'advisor.tier.important',3:'advisor.tier.recommended',4:'advisor.tier.optional'};
+const CHANGES=new Set(['start','stop','copy']);
+const riskLevel=r=>r==='safe'?'none':r;
+// Long lists scroll inside their card; a fade marks that more content is below.
+function updateFades(){document.querySelectorAll('.advisorscroll').forEach(s=>s.classList.toggle('fade',s.scrollHeight-s.scrollTop-s.clientHeight>4));}
+document.querySelectorAll('.advisorscroll').forEach(s=>s.addEventListener('scroll',updateFades,{passive:true}));
+window.addEventListener('resize',updateFades);
+async function loadAdvisor(){try{advice=await api('/api/advisor');renderAdvisor();renderHealthTile();}catch(e){$('advisorSummary').textContent=e.message;}}
+// Every advisor action reuses an existing flow, so starting or stopping always goes through the review dialog.
+function advisorButton(a){
+ const run=a&&{logs:()=>openLogs(a.project,a.service||''),details:()=>{const p=byName(a.project);if(p)inspectProject(p);},start:()=>act('start',a.projects,{review:true}),
+  stop:()=>act('stop',a.projects,{title:t('resources.stopPlan'),review:true}),copy:()=>copy(a.command),ports:()=>{go('navPorts','ports');loadPorts($('portInput').value.trim());},
+  memory:()=>go('navResources','resources'),disk:()=>{go('navDisk','disk');analyzeDisk();},refresh:()=>{refresh();loadAdvisor();}}[a.type];
+ return run?button(t(BTN_KEYS[a.type]),'mini',run):null;
+}
+function riskChip(r){const level=riskLevel(r);return el('span','risk '+RISK_CLASS[level],t(RISK_KEYS[level]));}
+function renderAdvisor(){
+ const h=advice.health,score=$('healthScore');score.textContent=h.score;score.className='score '+h.grade;$('healthGrade').textContent=t(GRADE_KEYS[h.grade]);
+ $('problemsCount').textContent=h.findings.length||'';$('wasteCount').textContent=advice.waste.length||'';$('actionsCount').textContent=advice.actions.length||'';
+ $('advisorSummary').textContent=[h.findings.length?t('advisor.sumProblems',{count:h.findings.length}):t('advisor.sumHealthy'),
+  advice.totals.memBytes?t('advisor.sumMem',{size:fmtBytes(advice.totals.memBytes)}):'',advice.totals.diskBytes?t('advisor.sumDisk',{size:fmtDisk(advice.totals.diskBytes)}):''].filter(Boolean).join(' · ');
+ const empty=key=>[el('li','emptysmall',t(key))];
+ $('advisorProblems').replaceChildren(...(h.findings.length?h.findings.map(f=>{
+  const li=el('li','finding '+f.level),head=el('div','findinghead'),points=el('span','points',f.points?`−${f.points}`:'0');if(!f.points)points.title=t('advisor.capped');
+  head.append(points,el('span','',tr(f.text)));li.append(head,el('div','smalltext',tr(f.fix)));if(f.detail)li.title=tr(f.detail);
+  const b=advisorButton(f.action);if(b)li.append(b);return li;}):empty('advisor.noProblems')));
+ $('advisorRules').replaceChildren(...Object.entries(h.rules).map(([k,r])=>{const li=el('li');li.append(el('span','',t(RULE_KEYS[k])),el('span','smalltext',r.cap?t('advisor.ruleEach',{points:r.points,cap:r.cap}):t('advisor.ruleOnce',{points:r.points})));return li;}));
+ $('advisorWaste').replaceChildren(...(advice.waste.length?advice.waste.map(w=>{
+  const li=el('li','wasteitem'),amount=w.memBytes?t('advisor.impactMem',{size:fmtBytes(w.memBytes)}):w.diskBytes?t('advisor.impactDisk',{size:fmtDisk(w.diskBytes)}):t('advisor.cpuNow',{pct:w.cpuPercent});
+  li.append(el('span','wastetext',tr(w.text)),el('span','amount',amount),riskChip(w.risk));return li;}):empty('advisor.noWaste')));
+ const notes=[advice.observing?t('advisor.observing',{minutes:advice.observing.minutes}):'',advice.diskPending?t('advisor.diskPending'):''].filter(Boolean);
+ $('advisorNotes').textContent=notes.join(' ');$('advisorNotes').classList.toggle('hidden',!notes.length);
+ $('advisorActions').replaceChildren(...(advice.actions.length?advice.actions.map(a=>{
+  const li=el('li','actionitem tier'+a.tier),chips=el('div','chips');chips.append(el('span','tierchip tier'+a.tier,t(TIER_KEYS[a.tier])));
+  if(a.impact?.memBytes)chips.append(el('span','amount',t('advisor.impactMem',{size:fmtBytes(a.impact.memBytes)})));
+  if(a.impact?.diskBytes)chips.append(el('span','amount',t('advisor.impactDisk',{size:fmtDisk(a.impact.diskBytes)})));
+  // Risk only matters for actions that change something; "open the log" carries none.
+  if(a.risk!=='none'||CHANGES.has(a.action?.type))chips.append(riskChip(a.risk));li.append(el('strong','',tr(a.title)),chips);
+  for(const w of a.why||[])li.append(el('div','smalltext',tr(w)));if(a.riskText)li.append(el('div','smalltext risknote',tr(a.riskText)));
+  const buttons=el('div','actionbuttons');for(const x of [a.action,a.secondary]){const b=advisorButton(x);if(b)buttons.append(b);}li.append(buttons);return li;}):empty('advisor.noActions')));
+ const keep=$('advisorKeep');keep.replaceChildren();
+ if(advice.keep.length){keep.append(el('div','pickertitle',t('advisor.keepTitle')));for(const k of advice.keep){const row=el('div','keeprow');row.append(el('strong','',k.project),el('span','smalltext',tr(k.reason)),el('span','smalltext',k.memBytes?fmtBytes(k.memBytes):''));keep.append(row);}}
+ requestAnimationFrame(updateFades);
+}
+$('refreshAdvisor').onclick=()=>{refreshResources();loadAdvisor();};
 
 const DEFAULT_PORTS=[80,443,3000,3306,4200,5000,5173,5432,6379,8000,8025,8069,8080,9000];
 const bindText=ip=>ip==='0.0.0.0'?t('ports.allInterfaces'):ip;
@@ -405,9 +479,10 @@ $('search').addEventListener('input',renderProjects);$('refresh').onclick=()=>{r
 $('refreshStats').onclick=refreshResources;$('analyzeDisk').onclick=analyzeDisk;$('stopSelected').onclick=()=>act('stop',[...selectedStops],{title:t('resources.stopPlan'),review:true});
 document.querySelectorAll('.chip[data-filter]').forEach(b=>b.onclick=()=>{filter=b.dataset.filter;document.querySelectorAll('.chip[data-filter]').forEach(x=>x.classList.toggle('selected',x===b));renderProjects();});
 const go=(nav,target)=>{if(target)$(target).scrollIntoView({behavior:'smooth'});else window.scrollTo({top:0,behavior:'smooth'});document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active',x.id===nav));};
-$('navProjects').onclick=()=>go('navProjects');$('navResources').onclick=()=>go('navResources','resources');$('navDisk').onclick=()=>go('navDisk','disk');$('navPorts').onclick=()=>{go('navPorts','ports');loadPorts($('portInput').value.trim());};$('memoryMetric').onclick=()=>go('navResources','resources');
+$('navProjects').onclick=()=>go('navProjects');$('navAdvisor').onclick=()=>go('navAdvisor','advisor');$('navResources').onclick=()=>go('navResources','resources');$('navDisk').onclick=()=>go('navDisk','disk');$('navPorts').onclick=()=>{go('navPorts','ports');loadPorts($('portInput').value.trim());};$('memoryMetric').onclick=()=>go('navResources','resources');$('hostMetric').onclick=()=>go('navResources','resources');
+$('tileHealth').onclick=()=>go('navAdvisor','advisor');$('tileDisk').onclick=()=>go('navDisk','disk');$('tileProjects').onclick=()=>{$('projectGrid').scrollIntoView({behavior:'smooth'});};
 // Polling only while the page is visible keeps the dashboard's own Docker load low.
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-lastRefresh>5000){refresh();refreshResources();}});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-lastRefresh>5000){refresh();refreshResources();loadAdvisor();}});
 (async()=>{
  try{const [vi,en]=await Promise.all(['vi','en'].map(l=>fetch(`/locales/${l}.json`).then(r=>r.json())));DICTS={vi,en};}catch{}
  // Read before setLanguage() writes it, so merely opening the page never creates a config file.
@@ -419,7 +494,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now(
   // The config file wins; a choice made before it was saved there (or on another URL) is written once.
   if(workspace.language&&workspace.language!==I.lang)await setLanguage(workspace.language,false);
   else if(!workspace.language&&I18N.valid(local))await setLanguage(I.lang,true);
-  await refresh();refreshResources();loadPorts();
-  setInterval(()=>{if(!document.hidden)refresh();},15000);setInterval(()=>{if(!document.hidden)refreshResources();},30000);
+  await refresh();refreshResources();loadAdvisor();loadPorts();
+  setInterval(()=>{if(!document.hidden)refresh();},15000);setInterval(()=>{if(!document.hidden){refreshResources();loadAdvisor();}},30000);
  }catch(e){alertMessage(e.message);}
 })();

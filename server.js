@@ -8,11 +8,14 @@ const crypto = require('node:crypto');
 const {execFile} = require('node:child_process');
 const {promisify} = require('node:util');
 const A = require('./lib/analysis');
+const Advisor = require('./lib/advisor');
 const I18N = require('./public/i18n.js');
 // API errors carry the message descriptor for the UI plus an English rendering for curl/CLI users.
 const EN = I18N.create({vi:require('./public/locales/vi.json'),en:require('./public/locales/en.json')},'en');
 const exec = promisify(execFile);
 const PORT = Number(process.env.DEV_MANAGER_PORT || 4173);
+// How long a project must stay quiet (no network traffic, CPU < 1%) before the advisor calls it idle.
+const IDLE_MINUTES = Number(process.env.DEV_MANAGER_IDLE_MINUTES) > 0 ? Number(process.env.DEV_MANAGER_IDLE_MINUTES) : 15;
 const HOST = '127.0.0.1';
 const CONFIG_DIR = process.env.DEV_MANAGER_CONFIG_DIR || path.join(os.homedir(), '.config', 'docker-dev-manager');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'projects.json');
@@ -102,6 +105,7 @@ function cached(ttl,load) {
     return pending;
   };
   get.invalidate=()=>{at=0;};
+  get.peek=()=>at?{value,at}:null;
   return get;
 }
 // `docker version` costs about 1/20 of the host CPU of `docker info`, which also enumerates CLI plugins.
@@ -181,8 +185,17 @@ async function stateView() {
 }
 async function stats() {
   const {stdout}=await docker(['stats','--no-stream','--format','{{json .}}'],{timeout:20000});
-  return stdout.split('\n').filter(Boolean).flatMap(line=>{try {const p=JSON.parse(line);return [{id:p.ID,name:p.Name,cpu:p.CPUPerc,memory:p.MemUsage,memoryPercent:p.MemPerc,netIO:p.NetIO,
-    cpuPercent:A.parsePercent(p.CPUPerc),memBytes:A.parseSize(String(p.MemUsage||'').split('/')[0])}];}catch{return [];}});
+  const list=stdout.split('\n').filter(Boolean).flatMap(line=>{try {const p=JSON.parse(line);return [{id:p.ID,name:p.Name,cpu:p.CPUPerc,memory:p.MemUsage,memoryPercent:p.MemPerc,netIO:p.NetIO,
+    cpuPercent:A.parsePercent(p.CPUPerc),memBytes:A.parseSize(String(p.MemUsage||'').split('/')[0]),netBytes:String(p.NetIO||'').split('/').reduce((n,x)=>n+A.parseSize(x),0)}];}catch{return [];}});
+  recordActivity(list);
+  return list;
+}
+// Per-container samples for idle detection, kept in memory only and only for two idle windows.
+const activityHistory = new Map();
+function recordActivity(list) {
+  const now=Date.now(),keepFor=2*IDLE_MINUTES*60000,live=new Set(list.map(s=>String(s.id).slice(0,12)));
+  for(const s of list){const id=String(s.id).slice(0,12),h=activityHistory.get(id)||[];h.push({t:now,net:s.netBytes,cpu:s.cpuPercent});while(h.length&&now-h[0].t>keepFor)h.shift();activityHistory.set(id,h);}
+  for(const id of activityHistory.keys())if(!live.has(id))activityHistory.delete(id);
 }
 const statsCached = cached(5000, stats);
 // CPU is averaged since the previous resources call (the UI asks every 30s), or since server start.
@@ -236,6 +249,19 @@ async function portsView(check) {
     checks.push({port,free:!holders.length&&!probed,holders,probed,alternatives});
   }
   return {entries,checks,ephemeralStart:A.EPHEMERAL_START};
+}
+const DISK_ADVISOR_TTL = 30*60000;
+// The advisor never waits for `system df -v` (seconds): it uses the last report and refreshes it in the background.
+async function advisorView() {
+  const docker=await dockerInfo();
+  if(!docker.available)return {...Advisor.advise({docker}),diskPending:false};
+  const workspace=readWorkspace();
+  const [{projects},stats_,vm,memory,entries]=await Promise.all([currentProjects(5000),statsCached().catch(()=>[]),vmInfo().catch(()=>({memTotal:0,ncpu:0})),hostMemory().catch(()=>null),portEntries().catch(()=>[])]);
+  const disk=diskReport.peek();
+  if(!disk||Date.now()-disk.at>DISK_ADVISOR_TTL)diskReport(DISK_ADVISOR_TTL).catch(()=>{});
+  const {containers}=A.resourceView(projects,stats_,workspace.keepRunning);
+  return {...Advisor.advise({docker,projects,containers,vm,host:memory?{memory}:null,keepRunning:workspace.keepRunning,portEntries:entries,disk:disk?.value||null,
+    activity:Advisor.projectActivity(projects,activityHistory,Date.now(),IDLE_MINUTES),idleMinutes:IDLE_MINUTES}),diskPending:!disk};
 }
 const diskReport = cached(60000, async()=>{
   const [{stdout},{snapshot}]=await Promise.all([docker(['system','df','-v','--format','{{json .}}'],{timeout:90000}),currentProjects(10000)]);
@@ -399,6 +425,9 @@ async function route(req,res){
   if (pathname==='/api/health' && req.method==='GET')return respond(res,200,await dockerInfo());
   if (pathname==='/api/state' && req.method==='GET')return respond(res,200,await stateView());
   if (pathname==='/api/projects' && req.method==='GET')return respond(res,200,{projects:readConfig()});
+  if (pathname==='/api/advisor' && req.method==='GET'){
+    try{return respond(res,200,await advisorView());}catch(e){return fail(res,503,dockerError(e));}
+  }
   if (pathname==='/api/resources' && req.method==='GET'){
     try{return respond(res,200,await resourcesView());}catch(e){return fail(res,503,dockerError(e));}
   }

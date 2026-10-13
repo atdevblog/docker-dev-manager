@@ -2,7 +2,7 @@
 
 [English](README.md) · **Tiếng Việt**
 
-Dashboard web chạy trên máy để quản lý các dự án Docker Compose. Nó tự tìm mọi dự án, khởi động và dừng chúng (từng dự án hoặc theo nhóm), giải thích vì sao một dự án không chạy, và giúp bạn giải phóng bộ nhớ, chọn port trống, dọn ổ đĩa an toàn. Công cụ bổ trợ cho Docker Desktop chứ không thay thế nó.
+Dashboard web chạy trên máy để quản lý các dự án Docker Compose. Nó tự tìm mọi dự án, chấm điểm sức khỏe Docker và cho biết việc nào cần làm trước, khởi động và dừng dự án (từng dự án hoặc theo nhóm), giải thích vì sao một dự án không chạy, và giúp bạn giải phóng bộ nhớ, chọn port trống, dọn ổ đĩa an toàn. Công cụ bổ trợ cho Docker Desktop chứ không thay thế nó.
 
 ![Docker Dev Manager](docs/images/vi-overview.png)
 
@@ -33,6 +33,7 @@ Mở **http://localhost:4173**. Tắt bằng `Ctrl+C`.
 |---|---|---|
 | `DEV_MANAGER_PORT` | `4173` | Port của dashboard (luôn chỉ bind `127.0.0.1`) |
 | `DEV_MANAGER_CONFIG_DIR` | `~/.config/docker-dev-manager` | Nơi lưu cài đặt |
+| `DEV_MANAGER_IDLE_MINUTES` | `15` | Thời gian một dự án đang chạy phải im lặng (không traffic mạng, CPU < 1%) trước khi được coi là nhàn rỗi |
 
 Ví dụ: `DEV_MANAGER_PORT=4174 npm start`. Muốn dashboard vẫn chạy sau khi đóng terminal, dùng trình quản lý tiến trình quen thuộc của bạn, hoặc `nohup npm start >/tmp/docker-dev-manager.log 2>&1 &`.
 
@@ -40,6 +41,8 @@ Ví dụ: `DEV_MANAGER_PORT=4174 npm start`. Muốn dashboard vẫn chạy sau k
 
 | | |
 |---|---|
+| **Tổng quan trong một hàng** | Năm thẻ ở đầu trang: điểm sức khỏe Docker, số dự án đang chạy, RAM container so với giới hạn của Docker VM, bộ nhớ máy Mac kèm áp lực bộ nhớ và swap, và dung lượng ổ đĩa thu hồi được. Bấm vào thẻ để đến phần chi tiết. |
+| **Sức khỏe & tư vấn tài nguyên** | Ba cột trả lời *Docker đang có vấn đề gì*, *lãng phí ở đâu* và *nên làm gì ngay*. Điểm sức khỏe chỉ gồm các khoản trừ có giải thích. Việc cần làm được xếp theo mức **Khẩn cấp → Quan trọng → Nên làm → Tối ưu**, việc nghiêm trọng nhất lên đầu, mỗi việc kèm ước tính RAM/ổ đĩa giải phóng và mức rủi ro. |
 | **Dự án** | Xem mọi dự án Compose cùng trạng thái, RAM và vấn đề. Khởi động, dừng, khởi động lại và xem nhật ký mà không cần import. |
 | **Vì sao không chạy** | Crash loop, mã thoát được giải thích dễ hiểu, bị kill vì hết bộ nhớ, container unhealthy, lỗi khởi động, mỗi dòng có nút mở nhật ký. |
 | **Thao tác an toàn** | Kiểm tra trước khi chạy: port bị container khác chiếm sẽ chặn thao tác, và các dự án phụ thuộc nhau qua network dùng chung được chỉ ra. |
@@ -48,7 +51,22 @@ Ví dụ: `DEV_MANAGER_PORT=4174 npm start`. Muốn dashboard vẫn chạy sau k
 | **Port** | Port nào trên máy đã bị chiếm, port nào được dự án đã dừng giữ chỗ, và port trống gần nhất. |
 | **Ổ đĩa** | Docker đang dùng bao nhiêu ổ đĩa, phân loại *dọn an toàn*, *cần xem lại* hoặc *có thể chứa dữ liệu*, kèm lệnh để sao chép. Dashboard không tự xóa gì. |
 
-[Hướng dẫn sử dụng](docs/guide.vi.md) đi qua từng màn hình kèm ảnh minh họa.
+## Ảnh màn hình
+
+![Sức khỏe & tư vấn tài nguyên](docs/images/vi-advisor.png)
+
+<table>
+<tr>
+<td width="50%"><b>Dự án và nhóm từ Docker</b><br><img src="docs/images/vi-projects.png" alt="Thẻ dự án kèm vấn đề và nhóm"></td>
+<td width="50%"><b>Giải phóng bộ nhớ</b><br><img src="docs/images/vi-memory.png" alt="Dự án đang chạy sắp theo bộ nhớ"></td>
+</tr>
+<tr>
+<td width="50%"><b>Port</b><br><img src="docs/images/vi-ports.png" alt="Port đã chiếm, được giữ chỗ và còn trống"></td>
+<td width="50%"><b>Ổ đĩa</b><br><img src="docs/images/vi-disk.png" alt="Dung lượng ổ đĩa phân loại theo rủi ro"></td>
+</tr>
+</table>
+
+[Hướng dẫn sử dụng](docs/guide.vi.md) đi qua chi tiết từng màn hình.
 
 ## File cài đặt
 
@@ -102,6 +120,7 @@ server {
 ```
 server.js            HTTP server, gọi Docker CLI, kiểm tra trước, tác vụ nền
 lib/analysis.js      luật thuần: gom nhóm, vấn đề, phụ thuộc, port, tài nguyên, ổ đĩa
+lib/advisor.js       điểm sức khỏe, lãng phí và khuyến nghị xếp theo thứ tự
 public/              trang web (index.html, app.js, style.css), i18n.js, locales/, icon
 assets/icons/        file nguồn icon; build.sh tạo lại favicon.ico và apple-touch-icon.png
 docs/                hướng dẫn sử dụng (en, vi) và ảnh chụp

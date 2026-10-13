@@ -2,7 +2,7 @@
 
 **English** · [Tiếng Việt](README.vi.md)
 
-A local web dashboard for the Docker Compose projects on your computer. It finds every project automatically, starts and stops them (one by one or in groups), explains why a project is not running, and helps you free memory, pick free ports and clean disk space safely. It complements Docker Desktop rather than replacing it.
+A local web dashboard for the Docker Compose projects on your computer. It finds every project automatically, scores Docker's health and tells you what to fix first, starts and stops projects (one by one or in groups), explains why a project is not running, and helps you free memory, pick free ports and clean disk space safely. It complements Docker Desktop rather than replacing it.
 
 ![Docker Dev Manager](docs/images/en-overview.png)
 
@@ -33,6 +33,7 @@ Open **http://localhost:4173**. Stop it with `Ctrl+C`.
 |---|---|---|
 | `DEV_MANAGER_PORT` | `4173` | Port of the dashboard (always bound to `127.0.0.1`) |
 | `DEV_MANAGER_CONFIG_DIR` | `~/.config/docker-dev-manager` | Where settings are saved |
+| `DEV_MANAGER_IDLE_MINUTES` | `15` | How long a running project must stay quiet (no network traffic, CPU < 1%) before the advisor calls it idle |
 
 Example: `DEV_MANAGER_PORT=4174 npm start`. To keep it running after closing the terminal, use your usual process manager, or `nohup npm start >/tmp/docker-dev-manager.log 2>&1 &`.
 
@@ -40,6 +41,8 @@ Example: `DEV_MANAGER_PORT=4174 npm start`. To keep it running after closing the
 
 | | |
 |---|---|
+| **Overview at a glance** | Five tiles at the top: Docker health score, running projects, RAM used by containers against the Docker VM limit, this Mac's memory with pressure and swap, and the disk space that can be reclaimed. Click a tile to jump to its details. |
+| **Health & resource advisor** | Three columns answer *what is wrong*, *where resources are wasted* and *what to do now*. The health score is made only of explained deductions. Actions are ranked **Urgent → Important → Recommended → Optional**, most serious first, each with estimated RAM/disk gain and risk. |
 | **Projects** | See every Compose project with its status, RAM and problems. Start, stop, restart and read logs without importing anything. |
 | **Why it is not running** | Crash loops, exit codes in plain words, out-of-memory kills, unhealthy containers and failed starts, each with a one-click log. |
 | **Safe actions** | Checks before running: ports taken by another container block the start, and projects that depend on each other through a shared network are pointed out. |
@@ -48,7 +51,22 @@ Example: `DEV_MANAGER_PORT=4174 npm start`. To keep it running after closing the
 | **Ports** | Which host ports are taken, which are reserved by stopped projects, and the nearest free ones. |
 | **Disk** | What Docker uses on disk, classified *safe to clean*, *review first* or *may hold data*, with copyable commands. The dashboard deletes nothing itself. |
 
-The [user guide](docs/guide.en.md) walks through each screen with screenshots.
+## Screenshots
+
+![Health & resource advisor](docs/images/en-advisor.png)
+
+<table>
+<tr>
+<td width="50%"><b>Projects and groups from Docker</b><br><img src="docs/images/en-projects.png" alt="Project cards with problems and groups"></td>
+<td width="50%"><b>Free up memory</b><br><img src="docs/images/en-memory.png" alt="Running projects sorted by memory"></td>
+</tr>
+<tr>
+<td width="50%"><b>Ports</b><br><img src="docs/images/en-ports.png" alt="Ports taken, reserved and free"></td>
+<td width="50%"><b>Disk</b><br><img src="docs/images/en-disk.png" alt="Disk usage classified by risk"></td>
+</tr>
+</table>
+
+The [user guide](docs/guide.en.md) walks through each screen in detail.
 
 ## Settings file
 
@@ -102,6 +120,7 @@ server {
 ```
 server.js            HTTP server, Docker CLI calls, preflight checks, background jobs
 lib/analysis.js      pure rules: grouping, problems, dependencies, ports, resources, disk
+lib/advisor.js       health score, waste and ranked recommendations
 public/              page (index.html, app.js, style.css), i18n.js, locales/, icons
 assets/icons/        icon sources; build.sh regenerates favicon.ico and apple-touch-icon.png
 docs/                user guides (en, vi) and screenshots

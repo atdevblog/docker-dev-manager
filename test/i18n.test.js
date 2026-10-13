@@ -6,7 +6,7 @@ process.env.DEV_MANAGER_CONFIG_DIR=fs.mkdtempSync(path.join(os.tmpdir(),'ddm-i18
 const I18N=require('../public/i18n.js'),A=require('../lib/analysis'),S=require('../server');
 const vi=require('../public/locales/vi.json'),en=require('../public/locales/en.json'),DICTS={vi,en};
 const ROOT=path.join(__dirname,'..'),read=f=>fs.readFileSync(path.join(ROOT,f),'utf8');
-const SOURCES=['server.js','lib/analysis.js','public/app.js'].map(f=>[f,read(f)]),HTML=read('public/index.html');
+const SOURCES=['server.js','lib/analysis.js','lib/advisor.js','public/app.js'].map(f=>[f,read(f)]),HTML=read('public/index.html');
 const NAMESPACES=new Set(Object.keys(vi)),viKeys=I18N.keys(vi),enKeys=I18N.keys(en);
 test.after(()=>fs.rmSync(process.env.DEV_MANAGER_CONFIG_DIR,{recursive:true,force:true}));
 
@@ -91,13 +91,26 @@ async function serverMessages(){
  const plans=[['start',by('shop')],['start',by('erp')],['stop',by('fleet')],['down',{...by('fleet'),managed:true}],['up',by('erp')],['up',{...by('old'),composeFileOk:false}],
   ['start',managedEmpty],['start',by('multi')],['restart',by('multi')],['stop',by('shop')],['start',undefined]];
  for(const [action,p] of plans){const item=await S.planItem(action,p,ctx);out.push(...item.errors,...item.warnings,item.info);}
+ // Advisor: offline engine, then a busy machine with every kind of finding, idle projects, pressure and disk waste.
+ const V=require('../lib/advisor');
+ const live=containers.filter(c=>c.state==='running').map(c=>({id:c.id,project:c.project,service:c.service,memBytes:c.name==='clam'?0.95*268435456:80e6,cpuPercent:2}));
+ const bigDisk=A.diskReport({BuildCache:[{InUse:'false',Shared:'false',Size:'2GB',LastUsedAt:'2020-01-01 00:00:00 +0000 UTC'}],Images:[{Repository:'<none>',Containers:'0',UniqueSize:'300MB'},{Repository:'node',Containers:'0',UniqueSize:'2GB'}],
+  Containers:[{State:'exited',Size:'200MB'}],Volumes:[{Name:'v',Links:'0',Size:'3GB',Labels:''}]});
+ const act=idle=>new Map(projects.map(p=>[p.name,{known:p.name!=='multi',idle:idle.includes(p.name),observedMinutes:20}]));
+ for(const r of [V.advise({docker:{available:false,error:'Cannot connect'}}),
+   V.advise({docker:{available:true},projects,containers:live,vm:{memTotal:1e9},host:{memory:{pressure:'critical'}},keepRunning:['fleet'],portEntries:inv,disk:bigDisk,activity:act(['erp'])}),
+   V.advise({docker:{available:true},projects,containers:live,vm:{memTotal:1e12},keepRunning:[],portEntries:inv,disk:bigDisk,activity:act(['erp','fleet'])})]){
+  for(const f of r.health.findings)out.push(f.text,f.fix,f.detail);
+  for(const a of r.actions)out.push(a.title,...(a.why||[]),a.riskText);
+  for(const w of r.waste)out.push(w.text);for(const k of r.keep)out.push(k.reason);
+ }
  out.push(A.msg('error.preflight',{details:[A.msg('preflight.noContainers')]}),A.msg('error.action',{actions:['start','stop']}),A.msg('error.needsImport',{action:'up'}),A.msg('error.confirm',{phrase:'down erp'}));
  // Plain strings are Docker's own text (e.g. State.Error) and must pass through unchanged.
  return out.filter(Boolean);
 }
 test('every server-built message renders in both languages with no raw keys or unfilled placeholders',async()=>{
  const messages=await serverMessages(),keysSeen=new Set(JSON.stringify(messages).match(/"key":"[^"]+"/g));
- assert.ok(keysSeen.size>=60,`only ${keysSeen.size} distinct messages exercised`);
+ assert.ok(keysSeen.size>=90,`only ${keysSeen.size} distinct messages exercised`);
  for(const lang of ['vi','en']){
   const missing=[],R=I18N.create(DICTS,lang,k=>missing.push(k));
   for(const m of messages){const text=R.render(m);assert.doesNotMatch(text,/\{\w+\}/,`${lang}: ${JSON.stringify(m)} -> ${text}`);assert.ok(text.trim(),`${lang}: empty ${JSON.stringify(m)}`);}

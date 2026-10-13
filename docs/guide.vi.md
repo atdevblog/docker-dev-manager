@@ -10,16 +10,17 @@ Docker Dev Manager là một trang web chạy trên máy của bạn, dùng đ�
 
 1. [Cài đặt và mở](#1-cài-đặt-và-mở)
 2. [Tổng quan màn hình](#2-tổng-quan-màn-hình)
-3. [Khởi động, dừng, khởi động lại](#3-khởi-động-dừng-khởi-động-lại)
-4. [Vì sao dự án không chạy?](#4-vì-sao-dự-án-không-chạy)
-5. [Xem nhật ký](#5-xem-nhật-ký)
-6. [Nhóm từ Docker](#6-nhóm-từ-docker)
-7. [Giải phóng bộ nhớ](#7-giải-phóng-bộ-nhớ)
-8. [Chọn port trống](#8-chọn-port-trống)
-9. [Dọn ổ đĩa an toàn](#9-dọn-ổ-đĩa-an-toàn)
-10. [Import dự án, Up và Down](#10-import-dự-án-up-và-down)
-11. [Ngôn ngữ](#11-ngôn-ngữ)
-12. [Câu hỏi và sự cố thường gặp](#12-câu-hỏi-và-sự-cố-thường-gặp)
+3. [Sức khỏe & tư vấn tài nguyên](#3-sức-khỏe--tư-vấn-tài-nguyên)
+4. [Khởi động, dừng, khởi động lại](#4-khởi-động-dừng-khởi-động-lại)
+5. [Vì sao dự án không chạy?](#5-vì-sao-dự-án-không-chạy)
+6. [Xem nhật ký](#6-xem-nhật-ký)
+7. [Nhóm từ Docker](#7-nhóm-từ-docker)
+8. [Giải phóng bộ nhớ](#8-giải-phóng-bộ-nhớ)
+9. [Chọn port trống](#9-chọn-port-trống)
+10. [Dọn ổ đĩa an toàn](#10-dọn-ổ-đĩa-an-toàn)
+11. [Import dự án, Up và Down](#11-import-dự-án-up-và-down)
+12. [Ngôn ngữ](#12-ngôn-ngữ)
+13. [Câu hỏi và sự cố thường gặp](#13-câu-hỏi-và-sự-cố-thường-gặp)
 
 ## 1. Cài đặt và mở
 
@@ -39,11 +40,15 @@ Không cần cài thêm gì vì dự án không có dependency npm nào. Mở **
 
 - **Thanh bên:** chuyển nhanh tới Dự án, Tài nguyên, Port, Ổ đĩa. Chấm màu ở dưới cùng cho biết có kết nối được Docker Engine hay không.
 - **Header:** chuyển ngôn ngữ (*Tiếng Việt / English*), **Làm mới**, và **Thêm thủ công** cho dự án chưa có container.
-- **Thẻ tổng quan:**
-  - *Container Docker*: RAM container đang dùng so với dung lượng VM của Docker Desktop, và CPU tính theo nhân.
-  - *Máy Mac này*: bộ nhớ đã dùng (tính như Activity Monitor), swap, CPU và áp lực bộ nhớ của macOS. Thẻ chuyển vàng hoặc đỏ khi máy thiếu bộ nhớ.
+- **Thẻ tổng quan** (bấm vào một thẻ để tới đúng mục liên quan):
+  - *Sức khỏe Docker*: điểm sức khỏe trên 100 của mục tư vấn kèm trạng thái (Khỏe, Cần chú ý, Không ổn), số vấn đề và phiên bản Docker. Thẻ chuyển đỏ khi mất kết nối Docker Engine.
+  - *Dự án đang chạy*: số đang chạy trên tổng số, kèm số container và số dự án cần chú ý.
+  - *RAM container*: RAM container đang dùng so với dung lượng VM của Docker Desktop (có thanh đo), CPU tính theo nhân, và dự án ngốn nhiều nhất.
+  - *Bộ nhớ máy Mac*: bộ nhớ đã dùng (tính như Activity Monitor) trên tổng, thanh đo đổi màu theo áp lực bộ nhớ của macOS, kèm swap và CPU. Swap lớn được làm nổi bật khi máy thiếu bộ nhớ.
+  - *Ổ đĩa thu hồi được*: phần dọn được an toàn, cộng phần cần xem lại trước.
 - **Bộ lọc:** Tất cả, Đang chạy, *Cần chú ý* (dự án có vấn đề), Được quản lý, Được phát hiện, kèm ô tìm kiếm.
-- **Nhóm từ Docker:** các dự án đi cùng nhau, được phát hiện tự động, với nút ▶ khởi động và ■ dừng (xem [mục 6](#6-nhóm-từ-docker)).
+- **Sức khỏe & tư vấn tài nguyên:** điểm sức khỏe, lãng phí ở đâu và nên làm gì ngay (xem [mục 3](#3-sức-khỏe--tư-vấn-tài-nguyên)).
+- **Nhóm từ Docker:** các dự án đi cùng nhau, được phát hiện tự động, với nút ▶ khởi động và ■ dừng (xem [mục 6](#7-nhóm-từ-docker)).
 - **Card dự án:** mỗi dự án Compose tìm thấy từ Docker là một card.
   - Trạng thái: *Đang chạy*, *Chạy một phần*, *Đã dừng*.
   - *Được phát hiện* là tự tìm thấy; *Được quản lý* là bạn đã import hoặc thêm thủ công (chỉ cần cho Up/Down).
@@ -51,9 +56,47 @@ Không cần cài thêm gì vì dự án không có dependency npm nào. Mở **
   - ★ *luôn chạy* đánh dấu hạ tầng dùng chung mà bạn không muốn lỡ tay dừng.
   - Các dòng đỏ hoặc vàng giải thích vấn đề, mỗi dòng có liên kết **Nhật ký**.
 
+Kéo xuống để xem các card dự án:
+
+![Card dự án](images/vi-projects.png)
+
 Mọi thứ tự làm mới mỗi 15 giây khi trang đang mở.
 
-## 3. Khởi động, dừng, khởi động lại
+## 3. Sức khỏe & tư vấn tài nguyên
+
+![Sức khỏe & tư vấn tài nguyên](images/vi-advisor.png)
+
+Mục tư vấn nằm ngay dưới các thẻ tổng quan và trả lời ba câu hỏi. Nó tự làm mới mỗi 30 giây; bấm **Kiểm tra lại** để cập nhật ngay.
+
+**Docker đang có vấn đề gì?** Điểm sức khỏe bắt đầu từ 100. Mỗi vấn đề trừ một số điểm cố định, không phải con số tùy ý, và mỗi dòng cho biết nguyên nhân, cách xử lý cùng một nút (mở nhật ký, xem lại & khởi động, chi tiết…). Rê chuột lên dòng để xem giải thích gốc của Docker. 90–100 là *Khỏe*, 70–89 *Cần chú ý*, dưới 70 *Không ổn*. Mục *Cách tính điểm* liệt kê mọi luật:
+
+| Vấn đề | Điểm | Tối đa |
+|---|---|---|
+| Không kết nối được Docker Engine | −100 | |
+| Crash loop | −15 mỗi lỗi | −45 |
+| Hết bộ nhớ khi đang chạy | −12 mỗi lỗi | −36 |
+| Container unhealthy / khởi động thất bại | −10 mỗi lỗi | −30 mỗi loại |
+| Container dùng từ 90% giới hạn RAM của chính nó | −8 mỗi lỗi | −24 |
+| Xung đột port (container đã dừng không khởi động được) / mất network | −6 mỗi lỗi | −18 mỗi loại |
+| Service dừng trong khi phần còn lại của dự án vẫn chạy | −5 mỗi lỗi | −15 |
+| Hết bộ nhớ ở lần chạy trước | −4 mỗi lỗi | −12 |
+| Áp lực bộ nhớ macOS nghiêm trọng / cảnh báo | −20 / −8 | |
+| VM Docker dùng từ 90% RAM | −10 | |
+
+**Lãng phí ở đâu?**
+- *Dự án nhàn rỗi*: đang chạy nhưng không có traffic mạng và CPU dưới 1% trong ít nhất 15 phút. CPU thấp thôi không bao giờ đủ để coi là nhàn rỗi. Dashboard chỉ đo khi trang đang mở, nên ngay sau khi mở nó sẽ cho biết còn cần quan sát thêm bao nhiêu phút.
+- Container tốn CPU vì crash loop.
+- Ổ đĩa Docker có thể trả lại (build cache, image dangling và image không dùng, container đã dừng, volume không dùng), mỗi loại kèm mức độ an toàn.
+
+**Nên làm gì ngay?** Danh sách xếp theo mức nghiêm trọng, việc gấp nhất ở trên cùng. Mỗi việc có nhãn mức độ: **Khẩn cấp** (đang hỏng: crash loop, hết bộ nhớ, khởi động thất bại), **Quan trọng** (dịch vụ chập chờn hoặc máy thiếu bộ nhớ), **Nên làm** (dự án nhàn rỗi, sự cố đã qua) và **Tối ưu** (dọn ổ đĩa). Ba cột luôn cao bằng nhau và tự cuộn bên trong, nên trang không bị giật khi advisor làm mới.
+- Mỗi việc có ước tính lợi ích (≈ RAM hoặc ổ đĩa), mức rủi ro và một nút. Nút khởi động và dừng luôn mở cửa sổ xem lại như thường lệ; không có gì chạy mà không qua bước này.
+- Các dự án nhàn rỗi được gợi ý dừng cùng nhau. Dự án mà chúng cần (database, proxy) chỉ được thêm vào khi nó cũng nhàn rỗi và không dự án nào khác dùng. Khi máy thiếu bộ nhớ (macOS cảnh báo hoặc VM Docker từ 80%), các dự án lớn nhất cũng được gợi ý, kèm nhãn *Cần xem lại* vì chúng đang được dùng.
+- Ổ đĩa: các loại an toàn có sẵn lệnh để sao chép; image và volume mở mục Ổ đĩa. Volume không bao giờ bị xóa tự động.
+- **Nên giữ chạy** liệt kê các dự án đang chạy nên giữ lại, kèm lý do: đã đánh dấu luôn chạy, đang được dự án khác dùng, đang được dùng, hoặc chưa quan sát đủ lâu.
+
+Muốn đổi ngưỡng nhàn rỗi: `DEV_MANAGER_IDLE_MINUTES=30 npm start`.
+
+## 4. Khởi động, dừng, khởi động lại
 
 Dùng các nút trên mỗi card:
 
@@ -72,7 +115,7 @@ Trước mỗi thao tác, dashboard đều kiểm tra trước. Nếu không có
 - Các dự án liên quan hiện ở trạng thái **chưa tick**. Tick vào nếu muốn đưa vào; mặc định không có gì ngoài lựa chọn của bạn được chạy.
 - Dự án mà dự án khác đang chạy vẫn còn dùng, hoặc được bạn đánh dấu *luôn chạy*, cũng **không được tick sẵn**, như trong ví dụ. Muốn dừng nó, bạn phải tự chọn.
 
-## 4. Vì sao dự án không chạy?
+## 5. Vì sao dự án không chạy?
 
 Card đã liệt kê các vấn đề quan trọng nhất. Bấm **Chi tiết** để xem đầy đủ:
 
@@ -90,7 +133,7 @@ Card đã liệt kê các vấn đề quan trọng nhất. Bấm **Chi tiết** 
 
 Container có restart policy `unless-stopped` hoặc `always` mà đang dừng thì đã được dừng có chủ đích, nên không bị báo là vấn đề.
 
-## 5. Xem nhật ký
+## 6. Xem nhật ký
 
 Bấm **Nhật ký** trên card, hoặc **Nhật ký** bên cạnh một vấn đề để mở thẳng đúng service đó.
 
@@ -102,7 +145,7 @@ Bấm **Nhật ký** trên card, hoặc **Nhật ký** bên cạnh một vấn �
 
 Nội dung nhật ký luôn được hiển thị đúng như Docker trả về.
 
-## 6. Nhóm từ Docker
+## 7. Nhóm từ Docker
 
 Docker đã gom container thành dự án Compose; mỗi card là một dự án. Nhóm ở cấp cao hơn: gom các **dự án cần nhau**. Bạn không cần tạo nhóm, vì nhóm lấy từ Docker.
 
@@ -117,7 +160,7 @@ Khi container của một dự án dùng network do dự án khác tạo (`exter
 
 Nhóm tự cập nhật khi file Compose của bạn thay đổi network.
 
-## 7. Giải phóng bộ nhớ
+## 8. Giải phóng bộ nhớ
 
 Mở **Tài nguyên** ở thanh bên, hoặc bấm vào thẻ *Container Docker*.
 
@@ -130,7 +173,7 @@ Mở **Tài nguyên** ở thanh bên, hoặc bấm vào thẻ *Container Docker*
 
 Không có gì bị dừng tự động. CPU thấp không có nghĩa là dự án không được dùng, nên dashboard không bao giờ gọi nó là nhàn rỗi. **Tất cả container đang chạy** hiển thị số liệu theo từng container.
 
-## 8. Chọn port trống
+## 9. Chọn port trống
 
 Mở **Port** trước khi gán port cho dự án mới.
 
@@ -146,7 +189,7 @@ Mở **Port** trước khi gán port cho dự án mới.
 
 Port từ 49152 trở lên do macOS cấp ngẫu nhiên nên không bao giờ được gợi ý.
 
-## 9. Dọn ổ đĩa an toàn
+## 10. Dọn ổ đĩa an toàn
 
 Mở **Ổ đĩa** và bấm **Phân tích ổ đĩa** (mất vài giây).
 
@@ -160,7 +203,7 @@ Mở **Ổ đĩa** và bấm **Phân tích ổ đĩa** (mất vài giây).
 
 Dashboard không bao giờ tự xóa bất cứ thứ gì.
 
-## 10. Import dự án, Up và Down
+## 11. Import dự án, Up và Down
 
 **Khởi động**, **Dừng**, **Khởi động lại** và **Nhật ký** dùng được cho mọi dự án mà không cần import. Bạn chỉ cần import để dùng:
 
@@ -175,11 +218,11 @@ Dashboard không bao giờ tự xóa bất cứ thứ gì.
 
 Up luôn hiện cửa sổ xem lại trước, và kiểm tra file Compose cùng port. Down luôn yêu cầu xác nhận.
 
-## 11. Ngôn ngữ
+## 12. Ngôn ngữ
 
 Dùng nút **Tiếng Việt / English** trên header. Trang chuyển ngay và ghi nhớ lựa chọn, kể cả sau khi khởi động lại. Tên dự án, container, đường dẫn, port và nội dung nhật ký không bao giờ bị dịch.
 
-## 12. Câu hỏi và sự cố thường gặp
+## 13. Câu hỏi và sự cố thường gặp
 
 | Vấn đề | Cách xử lý |
 |---|---|

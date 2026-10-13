@@ -70,7 +70,9 @@ test('real Docker: discovery, Docker-derived groups, preflight, label-mode actio
    assert.equal((await project(APP)).running,2);
   });
   await t.test('logs per service through label mode',async()=>{
-   const logs=await get(`/api/projects/${APP}/logs?service=app&tail=20`);assert.equal(logs.status,200);assert.match(logs.body.logs,/app up/);assert.doesNotMatch(logs.body.logs,/db up/);
+   // Docker may need a moment to flush the first lines of a container that just started.
+   let logs;for(let i=0;i<10;i++){logs=await get(`/api/projects/${APP}/logs?service=app&tail=20`);if(/app up/.test(logs.body.logs||''))break;await sleep(500);}
+   assert.equal(logs.status,200);assert.match(logs.body.logs,/app up/);assert.doesNotMatch(logs.body.logs,/db up/);
    assert.equal((await get(`/api/projects/${APP}/logs?service=nope`)).status,400);
   });
   await t.test('cancel leaves the remaining projects untouched',async()=>{
@@ -85,6 +87,11 @@ test('real Docker: discovery, Docker-derived groups, preflight, label-mode actio
    const crash=await project(CRASH);
    assert.ok(crash.issues.some(i=>i.kind==='crashloop'&&i.service==='loop'),JSON.stringify(crash.issues));
    assert.ok(crash.issues.some(i=>i.kind==='exited'&&i.service==='oneshot'&&/code 2/.test(text(i.text))));
+   const adv=(await get('/api/advisor')).body;
+   assert.ok(adv.health.findings.some(f=>f.rule==='crashloop'&&f.project===CRASH&&f.points===15),'crash loop deducts 15 points');
+   assert.ok(adv.health.score<=85);
+   const start=adv.actions.find(a=>a.kind==='startStopped'&&a.action.projects[0]===CRASH);
+   assert.ok(start,'suggests starting the stopped services');assert.deepEqual(start.secondary,{type:'logs',project:CRASH,service:'loop'});
   });
   await t.test('Up and Down need an imported project; Up preflight validates Compose config',async()=>{
    assert.equal((await post(`/api/projects/${APP}/down`,{confirm:`down ${APP}`})).status,400);

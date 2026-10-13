@@ -66,6 +66,9 @@ test('HTTP: new endpoints keep the host, origin and token rules',async()=>{
   assert.equal((await send('/api/plan','POST',{action:'prune',projects:['a']},auth)).status,400);
   assert.equal((await send('/api/batch','POST',{action:'down',projects:['a']},auth)).status,400);
   assert.equal((await fetch(base+'/api/jobs/00000000-0000-4000-8000-000000000000')).status,404);
+  const adv=await (await fetch(base+'/api/advisor')).json();
+  assert.equal(typeof adv.health.score,'number');assert.ok(['good','fair','poor'].includes(adv.health.grade));assert.ok(Array.isArray(adv.actions)&&Array.isArray(adv.waste)&&Array.isArray(adv.keep));
+  assert.ok(adv.health.findings.every(f=>f.points>=0&&f.text&&f.fix));
   const state=await (await fetch(base+'/api/state')).json();
   assert.equal(typeof state.docker.available,'boolean');assert.ok(Array.isArray(state.projects));assert.ok(Array.isArray(state.groups));assert.deepEqual(state.workspace.keepRunning,['infra']);
  }finally{await new Promise(r=>server.close(r));}
