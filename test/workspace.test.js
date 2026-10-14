@@ -70,6 +70,9 @@ test('HTTP: new endpoints keep the host, origin and token rules',async()=>{
   assert.equal((await send('/api/projects/a/containers/0123456789ab/plan','POST',{action:'rm'},auth)).status,400);
   assert.equal((await send('/api/projects/a/containers/zzzzzzzzzzzz/stop','POST',{},auth)).status,404);
   assert.equal((await send('/api/projects/a/containers/0123456789AB/kill','POST',{},auth)).status,404);
+  assert.equal((await send('/api/projects/a/containers/0123456789ab/terminal','POST',{mode:'shell'})).status,403);
+  assert.equal((await send('/api/pick-folder','POST',{})).status,403,'the folder picker needs the session token');
+  assert.equal((await send('/api/projects/a/containers/0123456789ab/terminal','POST',{mode:'rm -rf'},auth)).status,400);
   assert.equal((await fetch(base+'/api/jobs/00000000-0000-4000-8000-000000000000')).status,404);
   const adv=await (await fetch(base+'/api/advisor')).json();
   assert.equal(typeof adv.health.score,'number');assert.ok(['good','fair','poor'].includes(adv.health.grade));assert.ok(Array.isArray(adv.actions)&&Array.isArray(adv.waste)&&Array.isArray(adv.keep));
@@ -132,6 +135,7 @@ test('static files include the i18n runtime, both dictionaries and the icons, no
    const r=await fetch(base+f);assert.equal(r.status,200,f);assert.equal(r.headers.get('content-type'),type,f);
    assert.deepEqual(Buffer.from(await r.arrayBuffer()),fs.readFileSync(path.join(__dirname,'..','public',f.slice(1))),f+' served byte-for-byte');
   }
-  for(const f of ['/locales/fr.json','/server.js','/locales/../server.js'])assert.equal((await fetch(base+f)).status,404,f);
+  const font=await fetch(base+'/fonts/be-vietnam-pro-400-vietnamese.woff2');assert.equal(font.status,200);assert.equal(font.headers.get('content-type'),'font/woff2');assert.match(font.headers.get('cache-control'),/immutable/);
+  for(const f of ['/locales/fr.json','/server.js','/locales/../server.js','/fonts/OFL.txt','/fonts/missing.woff2'])assert.equal((await fetch(base+f)).status,404,f);
  }finally{await new Promise(r=>server.close(r));}
 });

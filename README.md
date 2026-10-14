@@ -10,7 +10,7 @@ A local web dashboard for the Docker Compose projects on your computer. It finds
 - **Works with existing projects**: discovered from Docker labels, with no import step and no files moved.
 - **Safe by default**: every action is checked first; nothing is deleted or stopped automatically.
 - **Light by default**: about 15 MB of RAM and no CPU at rest. While its tab is visible it refreshes the project list every 15 seconds (under 1% of one CPU core) and pauses when the tab is hidden. Anything that costs Docker seconds of work runs only when you click the button on its card.
-- **Remembers**: your language and the last measurements stay after a reload or a restart.
+- **Remembers**: your language, the last measurements and the sections you collapsed stay after a reload or a restart.
 - **Vietnamese / English** interface.
 
 📖 **[User guide](docs/guide.en.md)** · [Hướng dẫn sử dụng](docs/guide.vi.md)
@@ -45,8 +45,8 @@ Example: `DEV_MANAGER_PORT=4174 npm start`. To keep it running after closing the
 |---|---|
 | **Overview at a glance** | Five cards: Docker health score, running projects, container RAM against the Docker VM limit, this Mac's memory with pressure and swap, and reclaimable disk. Three of them have their own button: **Check** on *Docker health* (~0.5 s), **Measure** on *Container RAM* (~2 s) and **Analyze** on *Reclaimable disk* (~4 s); the other two update by themselves. Click a card to jump to its details. |
 | **Health & resource advisor** | Three columns built from what you measured on the cards: *what is wrong*, *where resources are wasted* and *what to do now*. The health score is made only of explained deductions. Actions are ranked **Urgent → Important → Recommended → Optional**, most serious first, each with estimated RAM/disk gain and risk. |
-| **Projects** | Every Compose project with its status, RAM and problems. Start, stop, restart and read logs without importing anything. |
-| **One container at a time** | Open a card's container list to start, stop, restart or read the logs of a single container, like Docker Desktop. Each state has its colour, icon and words: running, paused, stopped, failed (with its exit code), restarting. RAM/CPU and host ports (one click opens them in the browser) are shown per container. |
+| **Projects** | Every Compose project with its status, RAM and problems. Start, stop, restart, read logs or open a Terminal in its folder, without importing anything. Adding one by hand? **Choose…** picks the folder in Finder and finds its Compose file. |
+| **One container at a time** | Open a card's container list to start, stop, restart or read the logs of a single container, like Docker Desktop. Each state has its colour, icon and words: running, paused, stopped, failed (with its exit code), restarting. RAM/CPU and host ports (one click opens them in the browser) are shown per container, plus two Terminal buttons: **›_** a shell inside the container, in its working directory, and **⌂** its source folder on the Mac. |
 | **Why it is not running** | Crash loops, exit codes in plain words, out-of-memory kills, unhealthy containers and failed starts, each with a one-click log. |
 | **Safe actions** | Checks before running: a port taken by another container blocks the start, and what depends on what (through a shared network or `depends_on`) is pointed out before you stop it. |
 | **Groups from Docker** | When a project joins another project's network (an app and its database or proxy stack), they form a group automatically. Start or stop the group in one click, in dependency order, with a review first. |
@@ -128,7 +128,7 @@ server {
 server.js            HTTP server, Docker CLI calls, preflight checks, background jobs, saved measurements
 lib/analysis.js      pure rules: grouping, problems, dependencies, ports, resources, disk, container preflight
 lib/advisor.js       health score, waste and ranked recommendations
-public/              page (index.html, app.js, style.css), i18n.js, locales/, icons
+public/              page (index.html, app.js, style.css), i18n.js, locales/, icons, fonts/
 assets/icons/        icon sources; build.sh regenerates favicon.ico and apple-touch-icon.png
 docs/                user guides (en, vi) and screenshots
 test/                node:test suites
@@ -140,9 +140,12 @@ test/                node:test suites
 - **How actions run**:
   - A project's Start, Stop, Restart and Logs use `docker compose -p <name> <command>` from container labels. This needs no Compose file and keeps the `depends_on` order. It runs in an empty folder so Compose cannot pick up another project's file.
   - One container's Start, Stop and Restart use `docker start|stop|restart <id>`: only that container, like Docker Desktop.
+  - **›_** opens Terminal with `docker exec -it <container>` (bash when available) through a throwaway `.command` file, so macOS asks for no permission to control Terminal. **⌂** opens the host folder of the bind mount behind the container's working directory.
   - Up and Down use the imported project's Compose file.
 - **How measurements run**: the page polls only the project list and this Mac's memory. The health check, `docker stats` and `docker system df -v` each run on their own request; `/api/advisor` only combines the parts already measured and never starts them itself.
 
 ## License
 
 [MIT](LICENSE). Not affiliated with or endorsed by Docker, Inc. Docker is a trademark of Docker, Inc.
+
+The interface uses the [Be Vietnam Pro](https://github.com/bettergui/BeVietnamPro) font, bundled under the [SIL Open Font License 1.1](public/fonts/OFL.txt) so the page works offline.

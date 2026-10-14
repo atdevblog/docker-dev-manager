@@ -40,6 +40,7 @@ There is nothing to install: the project has no npm dependencies. Open **http://
 
 - **Sidebar**: jump to Projects, Resources, Ports or Disk. The dot at the bottom shows whether Docker Engine is reachable.
 - **Header**: switch language (*Tiếng Việt / English*), **Refresh**, and **Add manually** for a project that has no containers yet.
+- **Collapse what you do not need**: click a section title (Advisor, Projects, Free up memory, Ports, Disk) to fold it. Its summary line stays visible, the choice is remembered, and jumping to it from the sidebar or a card opens it again.
 - **Overview cards** (click one to jump to the matching section):
   - *Docker health*: the advisor's score out of 100 with its status (Healthy, Needs attention, Unhealthy), the number of problems and when it was checked. It says *Not checked* until you click **Check** on the card (about half a second). It turns red when Docker Engine is unreachable.
   - *Running projects*: running out of total, with the number of containers and of projects that need attention.
@@ -50,6 +51,7 @@ There is nothing to install: the project has no npm dependencies. Open **http://
 - **Health & resource advisor**: a health score, where resources are wasted and what to do now (see [section 3](#3-health--resource-advisor)).
 - **Groups from Docker**: projects that belong together, detected automatically, with ▶ start and ■ stop (see [section 6](#7-groups-from-docker)).
 - **Project cards**, one per Compose project found from Docker:
+  - Click the project's **name** to open its details.
   - Status: *Running*, *Partly running*, *Stopped*.
   - *Discovered* means found automatically; *Managed* means you imported or added it (needed only for Up/Down).
   - `N sources` means the same project name was started from several folders or file sets.
@@ -113,6 +115,7 @@ Use the buttons on each card:
 | **▶ Start** | Starts the project's existing containers (`docker compose start`). Never recreates them. | Untouched |
 | **■ Stop** | Stops the containers (`docker compose stop`). | Containers and volumes kept |
 | **↻ Restart** | Restarts the containers. | Untouched |
+| **›_ Terminal** | Opens Terminal in the project's folder (where its Compose file is). | Untouched |
 
 Before every action the dashboard checks for problems. If everything is fine, it runs at once. If not, a review window opens:
 
@@ -125,7 +128,11 @@ Before every action the dashboard checks for problems. If everything is fine, it
 
 ### One container at a time
 
-Like Docker Desktop, every container can be controlled on its own. On a card, click **▸ N containers** (or open **Details**). Each container gets a row with its state, RAM and CPU (once measured), its host ports (click one to open it in the browser) and three buttons: **▶ Start** or **■ Stop**, **↻ Restart** and **≡ Logs**.
+Like Docker Desktop, every container can be controlled on its own. On a card, click **▸ N containers** (or open **Details**). Each container gets a row with its state, RAM and CPU (once measured), its host ports (click one to open it in the browser) and its buttons: **▶ Start** or **■ Stop**, **↻ Restart**, **≡ Logs**, and two Terminal buttons:
+
+- **›_** opens Terminal with a shell inside the container (`docker exec`, bash when available), already in its working directory, for example `/var/www/api`. Only for a running container.
+- **⌂** opens Terminal on your Mac at the container's source folder: the folder mounted on its working directory, for example `~/Projects/api`. Greyed out when the code lives inside the image or a volume.
+
 
 - Each state has its own colour, icon and words, on the row and on the chip: **● Running** (green), **‖ Paused** (amber), **■ Stopped** (grey), **✕ Failed** with its exit code or *Out of memory* (red), **↻ Restarting** (red, a crash loop), **◐ Starting** and **○ Created** (blue). A stop with the usual codes (0, 137, 143) counts as stopped, not failed. Each card also carries a stripe in its project's status colour.
 - They run `docker start`, `docker stop` or `docker restart` on that one container. Its neighbours keep running, and a restart never starts the services it depends on.
@@ -232,6 +239,8 @@ To import, open **Details** and click **＋ Import project**. This is offered wh
 - the project name;
 - the folder (absolute path);
 - the Compose file name relative to that folder (for example `docker-compose.yml`).
+
+**Choose…** next to the folder opens a Finder window: pick the folder and the dashboard fills in its path, the Compose file it finds there and, if empty, the name. The description field takes up to 240 characters on several lines.
 
 Up always shows a review first, and checks the Compose file and ports. Down asks for confirmation.
 

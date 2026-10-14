@@ -10,7 +10,7 @@ Dashboard web chạy trên máy để quản lý các dự án Docker Compose. N
 - **Dùng ngay với dự án sẵn có:** tự phát hiện qua label của Docker, không cần import, không di chuyển file nào.
 - **An toàn mặc định:** mọi thao tác đều được kiểm tra trước; không có gì bị xóa hay dừng tự động.
 - **Nhẹ mặc định:** khoảng 15 MB RAM và không tốn CPU khi để yên. Khi tab đang hiện, nó cập nhật danh sách dự án mỗi 15 giây (dưới 1% của một nhân CPU) và tạm dừng khi tab bị ẩn. Những gì tốn vài giây xử lý của Docker chỉ chạy khi bạn bấm nút trên đúng thẻ của nó.
-- **Ghi nhớ:** ngôn ngữ và kết quả đo gần nhất vẫn còn sau khi reload hay khởi động lại.
+- **Ghi nhớ:** ngôn ngữ, kết quả đo gần nhất và các mục bạn đã thu gọn vẫn còn sau khi reload hay khởi động lại.
 - **Giao diện Tiếng Việt / English.**
 
 📖 **[Hướng dẫn sử dụng](docs/guide.vi.md)** · [User guide](docs/guide.en.md)
@@ -45,8 +45,8 @@ Ví dụ: `DEV_MANAGER_PORT=4174 npm start`. Muốn dashboard vẫn chạy sau k
 |---|---|
 | **Tổng quan trong một hàng** | Năm thẻ: điểm sức khỏe Docker, số dự án đang chạy, RAM container so với giới hạn của Docker VM, bộ nhớ máy Mac kèm áp lực bộ nhớ và swap, và ổ đĩa thu hồi được. Ba thẻ có nút riêng: **Kiểm tra** trên *Sức khỏe Docker* (~0,5 giây), **Đo** trên *RAM container* (~2 giây) và **Phân tích** trên *Ổ đĩa thu hồi được* (~4 giây); hai thẻ còn lại tự cập nhật. Bấm vào thẻ để đến phần chi tiết. |
 | **Sức khỏe & tư vấn tài nguyên** | Ba cột dựng từ những gì bạn đã đo trên các thẻ: *Docker đang có vấn đề gì*, *lãng phí ở đâu* và *nên làm gì ngay*. Điểm sức khỏe chỉ gồm các khoản trừ có giải thích. Việc cần làm được xếp theo mức **Khẩn cấp → Quan trọng → Nên làm → Tối ưu**, việc nghiêm trọng nhất lên đầu, mỗi việc kèm ước tính RAM/ổ đĩa giải phóng và mức rủi ro. |
-| **Dự án** | Mọi dự án Compose cùng trạng thái, RAM và vấn đề. Khởi động, dừng, khởi động lại và xem nhật ký mà không cần import. |
-| **Từng container** | Mở danh sách container trên thẻ dự án để khởi động, dừng, khởi động lại hoặc xem nhật ký của riêng một container, giống Docker Desktop. Mỗi trạng thái có màu, biểu tượng và chữ riêng: đang chạy, tạm dừng, đã dừng, lỗi (kèm mã thoát), đang khởi động lại. RAM/CPU và port trên máy (bấm để mở trong trình duyệt) hiện theo từng container. |
+| **Dự án** | Mọi dự án Compose cùng trạng thái, RAM và vấn đề. Khởi động, dừng, khởi động lại, xem nhật ký hoặc mở Terminal tại thư mục dự án, không cần import. Thêm dự án thủ công? **Chọn…** mở Finder để chọn thư mục và tự tìm file Compose. |
+| **Từng container** | Mở danh sách container trên thẻ dự án để khởi động, dừng, khởi động lại hoặc xem nhật ký của riêng một container, giống Docker Desktop. Mỗi trạng thái có màu, biểu tượng và chữ riêng: đang chạy, tạm dừng, đã dừng, lỗi (kèm mã thoát), đang khởi động lại. RAM/CPU và port trên máy (bấm để mở trong trình duyệt) hiện theo từng container, cùng hai nút Terminal: **›_** mở shell bên trong container, đúng thư mục làm việc của nó, và **⌂** mở thư mục mã nguồn trên máy Mac. |
 | **Vì sao không chạy** | Crash loop, mã thoát được giải thích dễ hiểu, bị kill vì hết bộ nhớ, container unhealthy, lỗi khởi động, mỗi dòng có nút mở nhật ký. |
 | **Thao tác an toàn** | Kiểm tra trước khi chạy: port bị container khác chiếm sẽ chặn thao tác, và những gì phụ thuộc nhau (qua network dùng chung hoặc `depends_on`) được chỉ ra trước khi bạn dừng. |
 | **Nhóm từ Docker** | Khi một dự án dùng network của dự án khác (ví dụ ứng dụng và stack database hoặc proxy của nó), chúng tự thành một nhóm. Khởi động hoặc dừng cả nhóm chỉ với một thao tác, đúng thứ tự phụ thuộc, có bước xem lại trước. |
@@ -128,7 +128,7 @@ server {
 server.js            HTTP server, gọi Docker CLI, kiểm tra trước, tác vụ nền, lưu kết quả đo
 lib/analysis.js      luật thuần: gom nhóm, vấn đề, phụ thuộc, port, tài nguyên, ổ đĩa, kiểm tra trước cho container
 lib/advisor.js       điểm sức khỏe, lãng phí và khuyến nghị xếp theo thứ tự
-public/              trang web (index.html, app.js, style.css), i18n.js, locales/, icon
+public/              trang web (index.html, app.js, style.css), i18n.js, locales/, icon, fonts/
 assets/icons/        file nguồn icon; build.sh tạo lại favicon.ico và apple-touch-icon.png
 docs/                hướng dẫn sử dụng (en, vi) và ảnh chụp
 test/                các bộ test node:test
@@ -140,9 +140,12 @@ test/                các bộ test node:test
 - **Cách thao tác chạy:**
   - Khởi động, Dừng, Khởi động lại và Nhật ký của cả dự án dùng `docker compose -p <tên> <lệnh>` dựa trên label của container. Cách này không cần file Compose và giữ đúng thứ tự `depends_on`. Lệnh chạy trong một thư mục rỗng để Compose không nạp nhầm file của dự án khác.
   - Khởi động, Dừng và Khởi động lại một container dùng `docker start|stop|restart <id>`: chỉ đúng container đó, giống Docker Desktop.
+  - **›_** mở Terminal chạy `docker exec -it <container>` (dùng bash nếu có) qua một file `.command` tạm, nên macOS không hỏi quyền điều khiển Terminal. **⌂** mở thư mục trên máy của bind mount nằm sau thư mục làm việc của container.
   - Up và Down dùng file Compose của dự án đã import.
 - **Cách phép đo chạy:** trang chỉ tự cập nhật danh sách dự án và bộ nhớ máy Mac. Kiểm tra sức khỏe, `docker stats` và `docker system df -v` mỗi thứ chạy theo yêu cầu riêng; `/api/advisor` chỉ tổng hợp các phần đã đo và không bao giờ tự chạy chúng.
 
 ## Giấy phép
 
 [MIT](LICENSE). Dự án không liên kết với và không được Docker, Inc. bảo trợ. Docker là nhãn hiệu của Docker, Inc.
+
+Giao diện dùng font [Be Vietnam Pro](https://github.com/bettergui/BeVietnamPro), đóng gói kèm theo [giấy phép SIL Open Font License 1.1](public/fonts/OFL.txt) để trang chạy được khi không có mạng.

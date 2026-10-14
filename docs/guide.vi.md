@@ -40,6 +40,7 @@ Không cần cài thêm gì vì dự án không có dependency npm nào. Mở **
 
 - **Thanh bên:** chuyển nhanh tới Dự án, Tài nguyên, Port, Ổ đĩa. Chấm màu ở dưới cùng cho biết có kết nối được Docker Engine hay không.
 - **Header:** chuyển ngôn ngữ (*Tiếng Việt / English*), **Làm mới**, và **Thêm thủ công** cho dự án chưa có container.
+- **Thu gọn phần chưa cần xem:** bấm vào tiêu đề một mục (Tư vấn, Dự án, Giải phóng bộ nhớ, Port, Ổ đĩa) để thu gọn. Dòng tóm tắt vẫn hiện, lựa chọn được ghi nhớ, và khi bạn chuyển tới mục đó từ thanh bên hay từ thẻ, nó tự mở lại.
 - **Thẻ tổng quan** (bấm vào một thẻ để tới đúng mục liên quan):
   - *Sức khỏe Docker*: điểm sức khỏe trên 100 của mục tư vấn kèm trạng thái (Khỏe, Cần chú ý, Không ổn), số vấn đề và thời điểm kiểm tra. Thẻ ghi *Chưa kiểm tra* cho đến khi bạn bấm **Kiểm tra** trên thẻ (khoảng nửa giây). Thẻ chuyển đỏ khi mất kết nối Docker Engine.
   - *Dự án đang chạy*: số đang chạy trên tổng số, kèm số container và số dự án cần chú ý.
@@ -50,6 +51,7 @@ Không cần cài thêm gì vì dự án không có dependency npm nào. Mở **
 - **Sức khỏe & tư vấn tài nguyên:** điểm sức khỏe, lãng phí ở đâu và nên làm gì ngay (xem [mục 3](#3-sức-khỏe--tư-vấn-tài-nguyên)).
 - **Nhóm từ Docker:** các dự án đi cùng nhau, được phát hiện tự động, với nút ▶ khởi động và ■ dừng (xem [mục 6](#7-nhóm-từ-docker)).
 - **Card dự án:** mỗi dự án Compose tìm thấy từ Docker là một card.
+  - Bấm vào **tên dự án** để mở phần chi tiết.
   - Trạng thái: *Đang chạy*, *Chạy một phần*, *Đã dừng*.
   - *Được phát hiện* là tự tìm thấy; *Được quản lý* là bạn đã import hoặc thêm thủ công (chỉ cần cho Up/Down).
   - `N nguồn` nghĩa là cùng một tên dự án được chạy từ nhiều thư mục hoặc bộ file khác nhau.
@@ -113,6 +115,7 @@ Dùng các nút trên mỗi card:
 | **▶ Khởi động** | Chạy lại các container sẵn có của dự án (`docker compose start`). Không bao giờ tạo lại container. | Giữ nguyên |
 | **■ Dừng** | Dừng các container (`docker compose stop`). | Giữ container và volume |
 | **↻ Khởi động lại** | Khởi động lại các container. | Giữ nguyên |
+| **›_ Terminal** | Mở Terminal tại thư mục dự án (nơi có file Compose). | Giữ nguyên |
 
 Trước mỗi thao tác, dashboard đều kiểm tra trước. Nếu không có vấn đề, thao tác chạy ngay. Nếu có, một cửa sổ xem lại sẽ mở ra:
 
@@ -125,7 +128,11 @@ Trước mỗi thao tác, dashboard đều kiểm tra trước. Nếu không có
 
 ### Điều khiển từng container
 
-Giống Docker Desktop, mỗi container có thể điều khiển riêng. Trên card, bấm **▸ N container** (hoặc mở **Chi tiết**). Mỗi container là một dòng gồm trạng thái, RAM và CPU (sau khi đã đo), các port trên máy (bấm vào để mở trong trình duyệt) và ba nút: **▶ Khởi động** hoặc **■ Dừng**, **↻ Khởi động lại** và **≡ Nhật ký**.
+Giống Docker Desktop, mỗi container có thể điều khiển riêng. Trên card, bấm **▸ N container** (hoặc mở **Chi tiết**). Mỗi container là một dòng gồm trạng thái, RAM và CPU (sau khi đã đo), các port trên máy (bấm vào để mở trong trình duyệt) và các nút: **▶ Khởi động** hoặc **■ Dừng**, **↻ Khởi động lại**, **≡ Nhật ký**, cùng hai nút Terminal:
+
+- **›_** mở Terminal với shell bên trong container (`docker exec`, dùng bash nếu có), vào sẵn thư mục làm việc của nó, ví dụ `/var/www/api`. Chỉ dùng được khi container đang chạy.
+- **⌂** mở Terminal trên máy Mac tại thư mục mã nguồn của container, tức thư mục được gắn vào thư mục làm việc của nó, ví dụ `~/Projects/api`. Nút mờ khi mã nằm trong image hoặc volume.
+
 
 - Mỗi trạng thái có màu, biểu tượng và chữ riêng, trên dòng container lẫn chip: **● Đang chạy** (xanh lá), **‖ Tạm dừng** (vàng), **■ Đã dừng** (xám), **✕ Lỗi** kèm mã thoát hoặc *Hết bộ nhớ* (đỏ), **↻ Đang khởi động lại** (đỏ, crash loop), **◐ Đang khởi động** và **○ Mới tạo** (xanh dương). Dừng với mã thông thường (0, 137, 143) được tính là đã dừng, không phải lỗi. Mỗi card dự án cũng có vạch màu theo trạng thái của dự án.
 - Các nút chạy `docker start`, `docker stop` hoặc `docker restart` trên đúng container đó. Các container khác vẫn chạy bình thường, và khởi động lại không kéo theo các service mà nó phụ thuộc.
@@ -232,6 +239,8 @@ Dashboard không bao giờ tự xóa bất cứ thứ gì.
 - tên dự án;
 - thư mục (đường dẫn tuyệt đối);
 - tên file Compose, tương đối so với thư mục (ví dụ `docker-compose.yml`).
+
+Nút **Chọn…** cạnh ô thư mục mở cửa sổ Finder: chọn thư mục là dashboard tự điền đường dẫn, file Compose tìm thấy trong đó và, nếu đang trống, tên dự án. Ô mô tả nhận tới 240 ký tự, viết được nhiều dòng.
 
 Up luôn hiện cửa sổ xem lại trước, và kiểm tra file Compose cùng port. Down luôn yêu cầu xác nhận.
 

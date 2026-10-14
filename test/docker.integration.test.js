@@ -82,6 +82,8 @@ test('real Docker: discovery, Docker-derived groups, preflight, label-mode actio
    assert.deepEqual(stopPlan.containers,['db']);assert.match(text(stopPlan.warnings),/app depends on db/);
    const stopped=await post(url(db,'stop'));assert.equal(stopped.status,200,stopped.body.error);
    let now=await project(APP);assert.equal(state(now,'db').state,'exited');assert.equal(state(now,'app').state,'running');
+   // Terminal: no shell in a stopped container, and no folder when nothing is mounted (no window opens).
+   if(process.platform==='darwin'){assert.equal((await post(url(db,'terminal'),{mode:'shell'})).status,409);assert.equal((await post(url(web,'terminal'),{mode:'folder'})).status,404);}
    const restarted=await post(url(web,'restart'));assert.equal(restarted.status,200,restarted.body.error);
    now=await project(APP);assert.notEqual(state(now,'app').startedAt,state(app,'app').startedAt);assert.equal(state(now,'db').state,'exited','a container restart never starts its dependencies');
    assert.equal((await post(url(db,'restart'))).body.skipped,true);

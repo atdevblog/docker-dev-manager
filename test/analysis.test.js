@@ -81,6 +81,16 @@ test('container actions touch one container and name the services around it',()=
  // Nothing to do is a skip with a reason, never an error.
  assert.deepEqual([plan('start','nginx'),plan('stop','redis'),plan('restart','redis')].map(i=>[i.skip,text(i.info)]),[[true,'Already running.'],[true,'Already stopped.'],[true,'Not running: use Start.']]);
 });
+test('source folder: the bind mount behind the working directory, never a volume or a lookalike path',()=>{
+ const dir=(wd,mounts)=>A.normalizeContainer({Id:'a'.repeat(64),Name:'/x',Config:{WorkingDir:wd,Labels:{}},State:{Status:'running'},HostConfig:{},NetworkSettings:{},Mounts:mounts}).sourceDir;
+ const bind=(s,d)=>({Type:'bind',Source:s,Destination:d});
+ assert.equal(dir('/var/www/api',[bind('/w/shared/php.conf','/usr/local/etc/php.conf'),bind('/w/api','/var/www/api')]),'/w/api');
+ assert.equal(dir('/app/src',[bind('/w/proj','/app')]),'/w/proj/src','working directory inside the mount');
+ assert.equal(dir('/app',[bind('/w/proj/','/app/')]),'/w/proj','trailing slashes');
+ assert.equal(dir('/application',[bind('/w/proj','/app')]),'','a longer name is not inside /app');
+ assert.equal(dir('/app',[{Type:'volume',Source:'/var/lib/docker/volumes/v',Destination:'/app'}]),'','named volumes live inside Docker');
+ assert.equal(dir('',[bind('/w/proj','/app')]),'');
+});
 test('execution order starts providers first and stops them last',()=>{
  const projects=[{name:'fleet',dependsOn:[]},{name:'erp',dependsOn:[{project:'fleet'}]},{name:'shop',dependsOn:[{project:'erp'},{project:'fleet'}]}];
  assert.deepEqual(A.executionOrder('start',['shop','erp','fleet'],projects),['fleet','erp','shop']);

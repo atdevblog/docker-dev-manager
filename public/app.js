@@ -59,9 +59,11 @@ async function api(url,method='GET',data,retried=false){
  // A restarted server has a new session token: fetch it once and try again, so nothing is lost silently.
  if(response.status===403&&method!=='GET'&&!retried){try{token=(await (await fetch('/api/session')).json()).token;}catch{}return api(url,method,data,true);}
  let result;try{result=await response.json();}catch{throw Error(t('error.invalidResponse'));}
- if(!response.ok)throw Error(result.message?tr(result.message):result.error||`HTTP ${response.status}`);return result;
+ // The message key travels with the error, so a form can point at the field it is about.
+ if(!response.ok){const err=Error(result.message?tr(result.message):result.error||`HTTP ${response.status}`);err.key=result.message?.key||'';throw err;}return result;
 }
-function toast(message){$('toast').textContent=message;$('toast').classList.remove('hidden');setTimeout(()=>$('toast').classList.add('hidden'),4500);}
+// An open modal dialog covers the page, so the message goes into that dialog to stay visible.
+function toast(message){const n=$('toast'),host=[...document.querySelectorAll('dialog[open]')].pop()||document.body;if(n.parentElement!==host)host.append(n);n.textContent=message;n.classList.remove('hidden');clearTimeout(toast.timer);toast.timer=setTimeout(()=>n.classList.add('hidden'),4500);}
 function alertMessage(message){$('alert').textContent=message;$('alert').classList.remove('hidden');}
 function el(tag,cls,text){const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;}
 function button(text,cls,fn,disabled=false,title=''){const b=el('button','btn '+cls,text);b.type='button';b.disabled=disabled;if(title)b.title=title;b.addEventListener('click',fn);return b;}
@@ -112,6 +114,8 @@ function updateCounters(){
  $('containerCount').textContent=attention?t('metric.runningAttention',{containers,count:attention}):t('metric.containersRunning',{count:containers});
  $('allCount').textContent=projects.length;$('runningChip').textContent=running.length;$('issuesCount').textContent=projects.filter(hasProblem).length;
  $('managedCount').textContent=projects.filter(p=>p.managed).length;$('discoveredCount').textContent=projects.filter(p=>!p.managed).length;
+ // Also the summary of the projects heading, so a collapsed section still tells how things stand.
+ $('projectsSummary').textContent=[t('projects.summary',{count:projects.length,running:running.length}),attention?t('metric.attention',{count:attention}):''].filter(Boolean).join(' · ');
  renderOverview();
 }
 // Both memory tiles express CPU in cores so the Docker share and the whole Mac compare directly.
@@ -150,12 +154,16 @@ function renderProjects(){
 }
 function projectCard(p){
  const card=el('article','project st-'+p.status+(p.issues.some(i=>i.level==='error')?' attention':''));
- const head=el('div','projtitle');head.append(el('span','projicon','▣'),el('h3','',p.name),el('span','pill '+p.status,t(STATUS_KEYS[p.status]||'status.unknown')));card.append(head);
+ // The name is the way into the details, the most common next step after reading a card.
+ const head=el('div','projtitle'),h3=el('h3'),open=el('button','projlink');open.type='button';open.title=t('card.openDetails',{project:p.name});
+ open.append(el('span','projicon','▣'),el('span','projname',p.name));open.addEventListener('click',()=>inspectProject(p));h3.append(open);
+ head.append(h3,el('span','pill '+p.status,t(STATUS_KEYS[p.status]||'status.unknown')));card.append(head);
  const badges=el('div','badgerow');badges.append(el('span','typebadge '+(p.managed?'ismanaged':'isdiscovered'),(p.managed?'● ':'◌ ')+t(p.managed?'card.managed':'card.discovered')),el('span','smalltext',t('card.runningOf',{running:p.running,total:p.total})));
  const usage=usageOf(p.name);if(usage)badges.append(el('span','smalltext',t('metric.ram',{size:fmtBytes(usage.memBytes)})));
  if(p.sources.length>1)badges.append(el('span','typebadge warnbadge',t('card.sources',{count:p.sources.length})));
  if(workspace.keepRunning.includes(p.name))badges.append(el('span','typebadge ismanaged','★ '+t('card.keepRunning')));
- card.append(badges,el('p','projdesc',p.description||t(p.managed?'card.descManaged':'card.descDiscovered')));
+ // Only a description someone wrote is shown: the type badge already says how the project was found.
+ card.append(badges);if(p.description)card.append(el('p','projdesc',p.description));
  card.append(el('div','path',p.directory?`${p.directory}${p.composeFile?' / '+p.composeFile:''}`:p.sources.length>1?t('card.workingDirs',{count:p.sources.length}):t('card.pathUnavailable')));
  if(p.issues.length){const box=el('div','issues');p.issues.slice(0,3).forEach(i=>box.append(issueLine(p,i)));if(p.issues.length>3)box.append(button(t('card.moreIssues',{count:p.issues.length-3}),'link',()=>inspectProject(p)));card.append(box);}
  const core=p.containers.filter(c=>!c.oneoff);
@@ -174,7 +182,9 @@ function projectCard(p){
  if(!p.total&&p.managed)a.append(button('⇡ '+t('action.up'),'primary',()=>act('up',[p.name]),blocked,t('card.upTitle')));
  else a.append(button('▶ '+t('action.start'),'primary',()=>act('start',[p.name]),blocked||!p.total||p.running===p.total,t('card.startTitle')));
  a.append(button('■ '+t('action.stop'),'secondary',()=>act('stop',[p.name]),blocked||!p.running),button('↻ '+t('action.restart'),'secondary',()=>act('restart',[p.name]),blocked||!p.running));
- a.append(button('≡ '+t('action.logs'),'secondary',()=>openLogs(p.name),!p.total),button('ⓘ '+t('action.details'),'subtle',()=>inspectProject(p)));
+ // Terminal opens at the project's folder (the largest source when it was started from several).
+ const dir=[p.directory,...p.sources.map(x=>x.directory)].find(Boolean);
+ a.append(button('≡ '+t('action.logs'),'secondary',()=>openLogs(p.name),!p.total),button('›_ '+t('action.terminal'),'secondary',()=>openIn(p,'terminal',dir),!dir,dir?t('card.terminalTitle',{path:dir}):t('card.noFolder')),button('ⓘ '+t('action.details'),'secondary',()=>inspectProject(p)));
  card.append(a);return card;
 }
 // One visual state per container: colour, icon and words together, never colour alone.
@@ -204,8 +214,15 @@ function containerButtons(p,c){
  main.classList.add(active?'act-stop':'act-start');
  box.append(main,
   iconButton('↻',t('container.restart',{container:name}),()=>actContainer('restart',p,c),blocked||!active),
-  iconButton('≡',t('container.logs',{container:name}),()=>openLogs(p.name,c.service),!c.service));
+  iconButton('≡',t('container.logs',{container:name}),()=>openLogs(p.name,c.service),!c.service),
+  iconButton('›_',t(c.state==='running'?'container.shell':'container.shellOff',{container:name}),()=>openTerminal(p,c,'shell'),c.state!=='running'),
+  iconButton('⌂',c.sourceDir?t('container.folder',{path:c.sourceDir}):t('container.folderNone',{container:name}),()=>openTerminal(p,c,'folder'),!c.sourceDir));
  return box;
+}
+// A shell inside the container (docker exec), or Terminal at its source folder on this Mac.
+async function openTerminal(p,c,mode){
+ try{await api(`/api/projects/${encodeURIComponent(p.name)}/containers/${c.id}/terminal`,'POST',{mode});toast(t(mode==='shell'?'toast.shellOpened':'toast.folderOpened',{container:c.service||c.name,path:c.sourceDir}));}
+ catch(e){toast(e.message);}
 }
 function containerRow(p,c){
  const row=el('li','containerrow '+stateDot(c)),main=el('div','containermain'),head=el('div','containerhead'),title=el('strong','',c.service||c.name),meta=el('span','smalltext');title.title=`${c.name} · ${c.image}`;
@@ -312,7 +329,7 @@ async function importProject(p){
 }
 async function saveWorkspace(next){try{workspace=await api('/api/workspace','PUT',{...next,language:I.lang});renderGroups();renderProjects();if(resources){for(const r of resources.projects)r.keepRunning=workspace.keepRunning.includes(r.name);renderSuggestions();}if(opened.size)compose();return true;}catch(e){toast(e.message);return false;}}
 async function toggleKeep(name){const keep=new Set(workspace.keepRunning);if(keep.has(name))keep.delete(name);else keep.add(name);if(await saveWorkspace({...workspace,keepRunning:[...keep]})){const p=byName(name);if(p)inspectProject(p);}}
-async function openIn(p,app,directory){try{await api(`/api/projects/${encodeURIComponent(p.name)}/open`,'POST',{app,directory});}catch(e){toast(e.message);}}
+async function openIn(p,app,directory){try{await api(`/api/projects/${encodeURIComponent(p.name)}/open`,'POST',{app,directory});if(app==='terminal')toast(t('toast.folderOpened',{path:directory}));}catch(e){toast(e.message);}}
 function inspectProject(p){
  const dialog=$('inspectDialog'),close=()=>dialog.close();$('inspectTitle').textContent=p.name;
  const actions=$('inspectActions');actions.replaceChildren();
@@ -351,8 +368,29 @@ function inspectProject(p){
  for(const c of p.commands){const row=el('div','cmdrow');row.append(el('span','smalltext',tr(c.label)),el('code','',c.command),button('⧉','mini',()=>copy(c.command),false,t('common.copy')));target.append(row);}
  if(!dialog.open)dialog.showModal();
 }
-function openProject(p){editing=p?.name||null;$('dialogTitle').textContent=editing?t('form.editTitle',{project:editing}):t('form.addTitle');const f=$('projectForm');f.reset();for(const field of ['name','directory','composeFile','description'])if(p)f.elements[field].value=p[field]||'';f.elements.name.disabled=!!editing;$('projectDialog').showModal();}
-$('projectForm').addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget;const data=Object.fromEntries(new FormData(f));if(editing)data.name=editing;try{await api(editing?`/api/projects/${encodeURIComponent(editing)}`:'/api/projects',editing?'PUT':'POST',data);$('projectDialog').close();toast(t('toast.saved'));await refresh();}catch(e){toast(e.message);}});
+function openProject(p){editing=p?.name||null;$('dialogTitle').textContent=editing?t('form.editTitle',{project:editing}):t('form.addTitle');const f=$('projectForm');f.reset();for(const field of ['name','directory','composeFile','description'])if(p)f.elements[field].value=p[field]||'';f.elements.name.disabled=!!editing;updateDescCount();formError('');$('projectDialog').showModal();}
+// Save errors show inside the form, next to the field they are about.
+const FIELD_OF={'error.projectName':'name','error.projectExists':'name','error.directoryAbsolute':'directory','error.directoryMissing':'directory','error.composeRelative':'composeFile','error.composeMissing':'composeFile','error.composeOutside':'composeFile','error.description':'description'};
+function formError(message,key){
+ const f=$('projectForm'),box=$('formError');box.textContent=message;box.classList.toggle('hidden',!message);
+ for(const el of f.querySelectorAll('[aria-invalid]'))el.removeAttribute('aria-invalid');
+ const field=FIELD_OF[key]&&f.elements[FIELD_OF[key]];if(field){field.setAttribute('aria-invalid','true');field.focus();}
+}
+$('projectForm').addEventListener('input',e=>{if(e.target.hasAttribute('aria-invalid'))formError('');});
+const updateDescCount=()=>{const d=$('projectForm').elements.description;$('descCount').textContent=d.value.length?`${d.value.length} / ${d.maxLength}`:'';};
+$('projectForm').elements.description.addEventListener('input',updateDescCount);
+// The macOS folder picker fills the path, the Compose file it finds there and, when empty, the name.
+$('pickFolder').onclick=async()=>{
+ const b=$('pickFolder'),f=$('projectForm');b.disabled=true;b.textContent=t('form.picking');
+ try{
+  const r=await api('/api/pick-folder','POST',{});if(r.cancelled)return;
+  f.elements.directory.value=r.directory;
+  if(r.composeFiles.length)f.elements.composeFile.value=r.composeFiles[0];else toast(t('toast.noCompose'));
+  if(!editing&&!f.elements.name.value&&r.name)f.elements.name.value=r.name;
+ }catch(e){toast(e.message);}
+ finally{b.disabled=false;b.textContent=t('form.pick');}
+};
+$('projectForm').addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget;const data=Object.fromEntries(new FormData(f));if(editing)data.name=editing;try{await api(editing?`/api/projects/${encodeURIComponent(editing)}`:'/api/projects',editing?'PUT':'POST',data);$('projectDialog').close();toast(t('toast.saved'));await refresh();}catch(e){formError(e.message,e.key);}});
 
 // Groups are derived by the server from shared Docker networks: an app and the projects it needs.
 function renderGroups(){
@@ -626,11 +664,24 @@ document.querySelectorAll('[data-lang]').forEach(b=>b.onclick=()=>setLanguage(b.
 $('search').addEventListener('input',renderProjects);$('refresh').onclick=()=>{refresh();loadHost();};$('scan').onclick=scanDocker;$('add').onclick=()=>openProject();
 $('refreshStats').onclick=refreshResources;$('analyzeDisk').onclick=analyzeDisk;$('stopSelected').onclick=()=>act('stop',[...selectedStops],{title:t('resources.stopPlan'),review:true});
 document.querySelectorAll('.chip[data-filter]').forEach(b=>b.onclick=()=>{filter=b.dataset.filter;document.querySelectorAll('.chip[data-filter]').forEach(x=>x.classList.toggle('selected',x===b));renderProjects();});
-const go=(nav,target)=>{if(target)$(target).scrollIntoView({behavior:'smooth'});else window.scrollTo({top:0,behavior:'smooth'});document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active',x.id===nav));};
-$('navProjects').onclick=()=>go('navProjects');$('navAdvisor').onclick=()=>go('navAdvisor','advisor');$('navResources').onclick=()=>go('navResources','resources');$('navDisk').onclick=()=>go('navDisk','disk');$('navPorts').onclick=()=>{go('navPorts','ports');loadPorts($('portInput').value.trim());};
+// Sections collapse from their heading; the summary line stays visible and the choice is remembered.
+const collapsed=new Set(storedList('ddm.collapsed'));
+function setCollapsed(section,on){
+ section.classList.toggle('collapsed',on);section.querySelector('.collapser').setAttribute('aria-expanded',String(!on));
+ if(on)collapsed.add(section.id);else{collapsed.delete(section.id);requestAnimationFrame(updateFades);}
+ storeList('ddm.collapsed',collapsed);
+}
+document.querySelectorAll('section.block').forEach(sec=>{const b=sec.querySelector('.collapser');if(collapsed.has(sec.id)){sec.classList.add('collapsed');b.setAttribute('aria-expanded','false');}b.addEventListener('click',()=>setCollapsed(sec,!sec.classList.contains('collapsed')));});
+// Jumping to a section opens it first when it is collapsed.
+const go=(nav,target)=>{
+ if(target){const el=$(target),sec=el.closest('section.block');if(sec?.classList.contains('collapsed'))setCollapsed(sec,false);el.scrollIntoView({behavior:'smooth'});}
+ else window.scrollTo({top:0,behavior:'smooth'});
+ document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active',x.id===nav));
+};
+$('navProjects').onclick=()=>go('navProjects','projects');$('navAdvisor').onclick=()=>go('navAdvisor','advisor');$('navResources').onclick=()=>go('navResources','resources');$('navDisk').onclick=()=>go('navDisk','disk');$('navPorts').onclick=()=>{go('navPorts','ports');loadPorts($('portInput').value.trim());};
 // A tile's body opens its section; the button inside it runs that tile's own measurement.
 const tileGo=(id,fn)=>$(id).addEventListener('click',e=>{if(!e.target.closest('button'))fn();});
-tileGo('tileHealth',()=>go('navAdvisor','advisor'));tileGo('tileProjects',()=>$('projectGrid').scrollIntoView({behavior:'smooth'}));
+tileGo('tileHealth',()=>go('navAdvisor','advisor'));tileGo('tileProjects',()=>go('navProjects','projects'));
 tileGo('memoryMetric',()=>go('navResources','resources'));tileGo('hostMetric',()=>go('navResources','resources'));tileGo('tileDisk',()=>go('navDisk','disk'));
 // Only cheap views are polled, and only while the page is visible: the project list (`docker ps` +
 // `inspect`, ~0.3 s) and this Mac's memory. Stats, disk and the advisor wait for a click.

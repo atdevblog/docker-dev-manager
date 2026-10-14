@@ -11,7 +11,8 @@ const A = require('./lib/analysis');
 const Advisor = require('./lib/advisor');
 const I18N = require('./public/i18n.js');
 // API errors carry the message descriptor for the UI plus an English rendering for curl/CLI users.
-const EN = I18N.create({vi:require('./public/locales/vi.json'),en:require('./public/locales/en.json')},'en');
+const DICTS = {vi:require('./public/locales/vi.json'),en:require('./public/locales/en.json')};
+const EN = I18N.create(DICTS,'en');
 const exec = promisify(execFile);
 const PORT = Number(process.env.DEV_MANAGER_PORT || 4173);
 // How long a project must stay quiet (no network traffic, CPU < 1%) before the advisor calls it idle.
@@ -387,6 +388,50 @@ async function containerPlanFor(action,p,c,ctx) {
   }
   return item;
 }
+// Terminal for one container: a shell inside it (docker exec lands in its working directory) or
+// macOS Terminal at its source folder. A throwaway .command file opens in Terminal without asking
+// for permission to control another app, as AppleScript would.
+const TERMINAL_DIR=path.join(os.tmpdir(),'docker-dev-manager-terminal');
+const DOCKER_NAME=/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
+function dockerPath(){for(const d of (process.env.PATH||'').split(':')){const f=path.join(d,'docker');try{fs.accessSync(f,fs.constants.X_OK);return f;}catch{}}return 'docker';}
+async function openTerminal(res,mode,c){
+  if(process.platform!=='darwin')return fail(res,501,A.msg('error.macOnly'));
+  try{
+    if(mode==='shell'){
+      if(c.state!=='running')return fail(res,409,A.msg('error.notRunning'));
+      fs.mkdirSync(TERMINAL_DIR,{recursive:true,mode:0o700});
+      for(const f of fs.readdirSync(TERMINAL_DIR)){const old=path.join(TERMINAL_DIR,f);try{if(Date.now()-fs.statSync(old).mtimeMs>600000)fs.unlinkSync(old);}catch{}}
+      const target=DOCKER_NAME.test(c.name)?c.name:c.id,file=path.join(TERMINAL_DIR,`${target}-${crypto.randomBytes(4).toString('hex')}.command`);
+      // Vietnamese Telex rewrites keys with backspace + retype, which a raw container shell receives
+      // twice; the shell says so in the dashboard's language when that input source is selected.
+      let lang='';try{lang=readWorkspace().language;}catch{}
+      const hint=A.shellQuote(I18N.create(DICTS,lang||I18N.FALLBACK).render(A.msg('container.imeHint')));
+      fs.writeFileSync(file,`#!/bin/sh\nclear\nif defaults read com.apple.HIToolbox AppleSelectedInputSources 2>/dev/null | grep -q Vietnamese; then printf '\\033[33m%s\\033[0m\\n\\n' ${hint}; fi\nexec ${A.shellQuote(dockerPath())} exec -it ${target} sh -c 'command -v bash >/dev/null 2>&1 && exec bash || exec sh'\n`,{mode:0o700});
+      await exec('open',['-a','Terminal',file],{timeout:10000});
+    }else{
+      // Only the folder Docker reports behind the container's working directory can be opened.
+      if(!c.sourceDir)return fail(res,404,A.msg('error.noSourceDir'));
+      if(!fs.existsSync(c.sourceDir)||!fs.statSync(c.sourceDir).isDirectory())return fail(res,404,A.msg('error.directoryNotFound',{path:c.sourceDir}));
+      await exec('open',['-a','Terminal',c.sourceDir],{timeout:10000});
+    }
+    return respond(res,200,{ok:true});
+  }catch(e){return fail(res,500,dockerError(e));}
+}
+// The browser cannot see absolute paths, but this local server can ask macOS for one. `choose folder`
+// runs inside osascript itself, so no permission to control another app is asked; texts go in as
+// arguments, never into the script.
+async function pickFolder() {
+  let lang='';try{lang=readWorkspace().language;}catch{}
+  const prompt=I18N.create(DICTS,lang||I18N.FALLBACK).render(A.msg('form.pickPrompt'));
+  const start=[path.join(os.homedir(),'Projects'),os.homedir()].find(d=>fs.existsSync(d));
+  try{
+    const {stdout}=await exec('osascript',['-e','on run argv','-e','tell me to activate','-e','return POSIX path of (choose folder with prompt (item 1 of argv) default location (POSIX file (item 2 of argv)))','-e','end run',prompt,start],{timeout:600000});
+    const directory=stdout.trim().replace(/(.)\/+$/,'$1');
+    // Suggestions only: the form still validates everything on save.
+    const name=path.basename(directory).replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/^[^a-zA-Z0-9]+|-+$/g,'').slice(0,50);
+    return {directory,composeFiles:COMPOSE_NAMES.filter(f=>fs.existsSync(path.join(directory,f))),name};
+  }catch(e){if(/-128|User cancel/i.test(String(e.stderr||e.message)))return {cancelled:true};throw e;}
+}
 // A project action and an action on one of its containers never run at the same time.
 const projectBusy=name=>operations.has(name)||[...operations].some(k=>k.startsWith(name+'/'));
 async function planFor(action,names) {
@@ -458,8 +503,9 @@ function authorization(req) {
   }
   return true;
 }
-const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.json':'application/json; charset=utf-8','.png':'image/png','.ico':'image/x-icon'};
-const STATIC_FILES=['index.html','app.js','style.css','i18n.js','locales/vi.json','locales/en.json','logo.svg','favicon.svg','favicon.ico','apple-touch-icon.png'];
+const mime={'.woff2':'font/woff2','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.json':'application/json; charset=utf-8','.png':'image/png','.ico':'image/x-icon'};
+const STATIC_FILES=['index.html','app.js','style.css','i18n.js','locales/vi.json','locales/en.json','logo.svg','favicon.svg','favicon.ico','apple-touch-icon.png',
+  'fonts/be-vietnam-pro-400-vietnamese.woff2','fonts/be-vietnam-pro-400-latin-ext.woff2','fonts/be-vietnam-pro-400-latin.woff2','fonts/be-vietnam-pro-500-vietnamese.woff2','fonts/be-vietnam-pro-500-latin-ext.woff2','fonts/be-vietnam-pro-500-latin.woff2','fonts/be-vietnam-pro-600-vietnamese.woff2','fonts/be-vietnam-pro-600-latin-ext.woff2','fonts/be-vietnam-pro-600-latin.woff2','fonts/be-vietnam-pro-700-vietnamese.woff2','fonts/be-vietnam-pro-700-latin-ext.woff2','fonts/be-vietnam-pro-700-latin.woff2'];
 function staticFile(req,res,urlPath){
   const target=urlPath==='/'?'index.html':urlPath.slice(1);
   if (!STATIC_FILES.includes(target)){res.writeHead(404);res.end();return;}
@@ -467,7 +513,7 @@ function staticFile(req,res,urlPath){
   // The saved language goes into the page itself, so the first frame is already in that language
   // whatever this browser stored for this address (localhost and a proxy domain do not share storage).
   if(target==='index.html'){let lang='';try{lang=readWorkspace().language;}catch{}content=content.toString('utf8').replace('<html lang="vi"',`<html lang="${lang||'vi'}" data-saved-lang="${lang}"`);}
-  res.writeHead(200,{'Content-Type':mime[path.extname(target)],'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'",'X-Content-Type-Options':'nosniff','Cache-Control':'no-cache'});
+  res.writeHead(200,{'Content-Type':mime[path.extname(target)],'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'",'X-Content-Type-Options':'nosniff','Cache-Control':target.startsWith('fonts/')?'public, max-age=31536000, immutable':'no-cache'});
   res.end(content);
 }
 async function route(req,res){
@@ -520,21 +566,27 @@ async function route(req,res){
     if(jobMatch[2]&&req.method==='POST'){job.cancel=true;return respond(res,200,{job:publicJob(job)});}
     if(!jobMatch[2]&&req.method==='GET')return respond(res,200,{job:publicJob(job)});
   }
+  if(pathname==='/api/pick-folder' && req.method==='POST'){
+    if(process.platform!=='darwin')return fail(res,501,A.msg('error.macOnly'));
+    try{return respond(res,200,await pickFolder());}catch(e){return fail(res,500,dockerError(e));}
+  }
   if(pathname==='/api/projects' && req.method==='POST') {
     let p;try{p=validProject(await readBody(req));}catch(e){return fail(res,400,why(e));}
     const ps=readConfig();if(ps.some(x=>x.name===p.name))return fail(res,409,A.msg('error.projectExists'));
     ps.push(p);writeConfig(ps);return respond(res,201,{project:p});
   }
-  const one=pathname.match(/^\/api\/projects\/([a-zA-Z0-9_-]+)\/containers\/([0-9a-f]{12})\/(plan|start|stop|restart)$/);
+  const one=pathname.match(/^\/api\/projects\/([a-zA-Z0-9_-]+)\/containers\/([0-9a-f]{12})\/(plan|start|stop|restart|terminal)$/);
   if(one&&req.method==='POST'){
     const [,name,id,verb]=one;
     let b;try{b=await readBody(req);}catch(e){return fail(res,400,why(e));}
     const action=verb==='plan'?b.action:verb;
-    if(!CONTAINER_ACTIONS.includes(action))return fail(res,400,A.msg('error.action',{actions:CONTAINER_ACTIONS}));
+    if(verb==='terminal'&&!['shell','folder'].includes(b.mode))return fail(res,400,A.msg('error.terminalMode'));
+    if(verb!=='terminal'&&!CONTAINER_ACTIONS.includes(action))return fail(res,400,A.msg('error.action',{actions:CONTAINER_ACTIONS}));
     if(!(await dockerInfo()).available)return fail(res,503,A.msg('error.dockerOffline'));
     const {snapshot,projects}=await currentProjects(1000),p=projects.find(x=>x.name===name),c=p?.containers.find(x=>x.id===id);
     if(!p)return fail(res,404,A.msg('error.projectNotFound'));
     if(!c)return fail(res,404,A.msg('error.containerNotFound'));
+    if(verb==='terminal')return openTerminal(res,b.mode,c);
     const ctx={containers:snapshot.containers,networks:snapshot.networks,keepRunning:readWorkspace().keepRunning};
     if(verb==='plan'){const item=await containerPlanFor(action,p,c,ctx);return respond(res,200,{action,items:[item],order:[item.project]});}
     const key=`${name}/${id}`;
