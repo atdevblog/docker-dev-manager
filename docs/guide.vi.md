@@ -38,45 +38,45 @@ Không cần cài thêm gì vì dự án không có dependency npm nào. Mở **
 
 ![Tổng quan](images/vi-overview.png)
 
-- **Thanh bên:** chuyển nhanh tới Dự án, Tài nguyên, Port, Ổ đĩa. Chấm màu ở dưới cùng cho biết có kết nối được Docker Engine hay không.
-- **Header:** chuyển ngôn ngữ (*Tiếng Việt / English*), **Làm mới**, và **Thêm thủ công** cho dự án chưa có container.
-- **Thu gọn phần chưa cần xem:** bấm vào tiêu đề một mục (Tư vấn, Dự án, Giải phóng bộ nhớ, Port, Ổ đĩa) để thu gọn. Dòng tóm tắt vẫn hiện, lựa chọn được ghi nhớ, và khi bạn chuyển tới mục đó từ thanh bên hay từ thẻ, nó tự mở lại.
-- **Thẻ tổng quan** (bấm vào một thẻ để tới đúng mục liên quan):
-  - *Sức khỏe Docker*: điểm sức khỏe trên 100 của mục tư vấn kèm trạng thái (Khỏe, Cần chú ý, Không ổn), số vấn đề và thời điểm kiểm tra. Thẻ ghi *Chưa kiểm tra* cho đến khi bạn bấm **Kiểm tra** trên thẻ (khoảng nửa giây). Thẻ chuyển đỏ khi mất kết nối Docker Engine.
-  - *Dự án đang chạy*: số đang chạy trên tổng số, kèm số container và số dự án cần chú ý.
-  - *RAM container*: RAM container đang dùng so với dung lượng VM của Docker Desktop (có thanh đo), CPU tính theo nhân, và dự án ngốn nhiều nhất. Thẻ cần `docker stats` (tốn khoảng 2 giây xử lý của Docker), nên ghi *Chưa đo* cho đến khi bạn bấm **Đo** trên thẻ.
-  - *Bộ nhớ máy Mac*: bộ nhớ đã dùng (tính như Activity Monitor) trên tổng, thanh đo đổi màu theo áp lực bộ nhớ của macOS, kèm swap và CPU. Swap lớn được làm nổi bật khi máy thiếu bộ nhớ.
-  - *Ổ đĩa thu hồi được*: phần dọn được an toàn, cộng phần cần xem lại trước. Bấm **Phân tích** trên thẻ (`docker system df -v`, mất vài giây).
-- **Bộ lọc:** Tất cả, Đang chạy, *Cần chú ý* (dự án có vấn đề), Được quản lý, Được phát hiện, kèm ô tìm kiếm.
-- **Sức khỏe & tư vấn tài nguyên:** điểm sức khỏe, lãng phí ở đâu và nên làm gì ngay (xem [mục 3](#3-sức-khỏe--tư-vấn-tài-nguyên)).
-- **Nhóm từ Docker:** các dự án đi cùng nhau, được phát hiện tự động, với nút ▶ khởi động và ■ dừng (xem [mục 6](#7-nhóm-từ-docker)).
-- **Card dự án:** mỗi dự án Compose tìm thấy từ Docker là một card.
-  - Bấm vào **tên dự án** để mở phần chi tiết.
-  - Trạng thái: *Đang chạy*, *Chạy một phần*, *Đã dừng*.
-  - *Được phát hiện* là tự tìm thấy; *Được quản lý* là bạn đã import hoặc thêm thủ công (chỉ cần cho Up/Down).
-  - `N nguồn` nghĩa là cùng một tên dự án được chạy từ nhiều thư mục hoặc bộ file khác nhau.
-  - ★ *luôn chạy* đánh dấu hạ tầng dùng chung mà bạn không muốn lỡ tay dừng.
-  - Các dòng đỏ hoặc vàng giải thích vấn đề, mỗi dòng có liên kết **Nhật ký**.
-
-Kéo xuống để xem các card dự án:
+- **Thanh bên** chia ba nhóm, mỗi mục là một trang: *Khám phá* (**Tổng quan**, **Dự án**, **Container**), *Theo dõi* (**Sức khỏe**, **Tài nguyên**, **Port**) và *Bảo trì* (**Dọn ổ đĩa**). Chấm màu ở dưới cùng cho biết có kết nối được Docker Engine hay không, nút bên cạnh thu gọn thanh bên chỉ còn biểu tượng. Mỗi trang có địa chỉ riêng (`#projects`, `#containers`…), nên khi reload bạn vẫn ở đúng trang.
+- **Thanh trên cùng:** bạn đang ở đâu, ngôn ngữ (*Tiếng Việt / English*), nút đổi giao diện sáng/tối, **Làm mới**, và **Thêm thủ công** cho dự án chưa có container. Giao diện theo macOS cho đến khi bạn chọn; lựa chọn được lưu cùng ngôn ngữ.
+- **Tổng quan** cho biết chuyện gì đang diễn ra:
+  - Năm thẻ (bấm vào thẻ để mở trang của nó):
+    - *Sức khỏe Docker*: điểm trên 100 kèm trạng thái (Khỏe, Cần chú ý, Không ổn), số vấn đề và thời điểm kiểm tra. Thẻ ghi *Chưa kiểm tra* cho đến khi bạn bấm **Kiểm tra** trên thẻ (khoảng nửa giây). Thẻ chuyển đỏ khi mất kết nối Docker Engine.
+    - *Dự án đang chạy*: số đang chạy trên tổng số, kèm số container và số dự án cần chú ý.
+    - *RAM container*: RAM container đang dùng so với dung lượng VM của Docker Desktop (có thanh đo), CPU tính theo nhân, và dự án ngốn nhiều nhất. Thẻ cần `docker stats` (tốn khoảng 2 giây xử lý của Docker), nên ghi *Chưa đo* cho đến khi bạn bấm **Đo** trên thẻ.
+    - *Bộ nhớ máy Mac*: bộ nhớ đã dùng (tính như Activity Monitor) trên tổng, thanh đo đổi màu theo áp lực bộ nhớ của macOS, kèm swap và CPU. Swap lớn được làm nổi bật khi máy thiếu bộ nhớ.
+    - *Ổ đĩa thu hồi được*: phần dọn được an toàn, cộng phần cần xem lại trước. Bấm **Phân tích** trên thẻ (`docker system df -v`, mất vài giây).
+  - **Container theo dự án:** mỗi dự án một thanh, dài theo số container và chia màu theo trạng thái (đang chạy, không khỏe hoặc tạm dừng, lỗi hoặc khởi động lại, đã dừng), cuối thanh ghi *đang chạy / tổng*. Rê chuột lên thanh để xem số lượng, bấm vào tên để xem chi tiết, **Xem bảng** mở trang Container.
+  - **RAM theo dự án:** các dự án xếp theo bộ nhớ, kèm tỷ lệ trên VM Docker, lấy từ lần đo *RAM container* gần nhất. Container không thuộc dự án nào được gộp thành *Container độc lập*.
+  - **Cần chú ý:** các vấn đề mà dự án đang báo, lỗi xếp trước, mỗi dòng kèm tên dự án và nút **Nhật ký**.
+  - **Dự án:** các dự án đầu danh sách cùng trạng thái và RAM; bấm vào tên để xem chi tiết, **Xem tất cả** để xem hết. Mọi khối đều thu gọn được bằng cách bấm tiêu đề, lựa chọn được ghi nhớ.
+- **Dự án:** bộ lọc (Tất cả, Đang chạy, *Cần chú ý*, Được quản lý, Được phát hiện), ô tìm kiếm, các [nhóm từ Docker](#7-nhóm-từ-docker) với nút ▶ khởi động và ■ dừng, và mỗi dự án Compose là một card:
+  - Bấm vào **tên dự án** để mở phần chi tiết, hiện thành một ngăn trượt từ bên phải. Rê chuột lên tên để biết dự án *Được phát hiện* (tự tìm thấy) hay *Được quản lý* (bạn đã import hoặc thêm thủ công, chỉ cần cho Up/Down), cùng thư mục của nó.
+  - Trạng thái: *Đang chạy*, *Chạy một phần* hoặc *Đã dừng*.
+  - Một dòng dưới tên cho biết điều đáng biết nhất: vấn đề nghiêm trọng nhất (kèm **Nhật ký** và **+N khác**), nếu không có thì mô tả, nếu không nữa thì thư mục. Theo sau là các nhãn: *Được quản lý*, `N nguồn` (cùng một tên dự án được chạy từ nhiều thư mục hoặc bộ file khác nhau) và ★ *Luôn chạy* (hạ tầng dùng chung mà bạn không muốn lỡ tay dừng).
+  - **Thanh container** ghi *đang chạy / tổng*, RAM sau khi đã đo, và tô màu trạng thái của từng container; rê chuột lên để xem số lượng.
+  - Các nút: bước tiếp theo bằng chữ (**▶ Khởi động**, hoặc **■ Dừng** khi mọi thứ đang chạy), sau đó là các icon nhẹ có tooltip cho Dừng, Khởi động lại, Nhật ký, Terminal và Chi tiết, chỉ hiện khi bấm được.
 
 ![Card dự án](images/vi-projects.png)
 
-Trên mỗi card, **▸ N container** mở ra từng container với nút riêng (xem [Điều khiển từng container](#điều-khiển-từng-container)).
+Bấm vào **thanh container** trên card để mở ra từng container với nút riêng (xem [Điều khiển từng container](#điều-khiển-từng-container)).
 
-Danh sách dự án và *Bộ nhớ máy Mac* tự làm mới mỗi 15 giây khi trang đang mở, vì rất nhẹ. Các phép đo chỉ chạy khi bạn bấm nút trên đúng thẻ của nó, mỗi lần một phép, để dashboard luôn nhẹ. Đo xong, nút đổi thành **↻ Kiểm tra lại**, **↻ Đo lại** hoặc **↻ Phân tích lại**, và thẻ ghi rõ đo lúc mấy giờ. Kết quả đo được ghi nhớ: sau khi reload (hay khởi động lại) chúng hiện lại kèm giờ đo. Chỉ phần kiểm tra sức khỏe tự chạy lại vì chỉ mất nửa giây; RAM/CPU và ổ đĩa chờ bạn bấm.
+- **Container:** mọi container của mọi dự án trong một bảng, gồm trạng thái, CPU · RAM (sau khi đã đo), port, thời gian chạy và các nút giống trên card. Lọc theo Đang chạy, Đã dừng hoặc Có vấn đề, hoặc tìm theo tên, dự án, image hay port. Container có vấn đề xếp lên đầu.
+
+Danh sách dự án và *Bộ nhớ máy Mac* tự làm mới mỗi 15 giây khi trang đang mở, vì rất nhẹ. Các phép đo chỉ chạy khi bạn bấm nút của nó, trên thẻ ở trang Tổng quan hoặc ở đầu trang tương ứng, mỗi lần một phép, để dashboard luôn nhẹ. Đo xong, nút đổi thành **↻ Kiểm tra lại**, **↻ Đo lại** hoặc **↻ Phân tích lại**, và thẻ ghi rõ đo lúc mấy giờ. Kết quả đo được ghi nhớ: sau khi reload (hay khởi động lại) chúng hiện lại kèm giờ đo. Chỉ phần kiểm tra sức khỏe tự chạy lại vì chỉ mất nửa giây; RAM/CPU và ổ đĩa chờ bạn bấm.
 
 ## 3. Sức khỏe & tư vấn tài nguyên
 
 ![Sức khỏe & tư vấn tài nguyên](images/vi-advisor.png)
 
-Mục tư vấn nằm ngay dưới các thẻ tổng quan và trả lời ba câu hỏi từ những gì bạn đã đo trên các thẻ phía trên; bản thân nó không có nút đo:
+Trang **Sức khỏe** trả lời ba câu hỏi từ những gì bạn đã đo. Đầu trang có ba nút giống trên các thẻ của trang Tổng quan:
 
 - **Kiểm tra** trên thẻ *Sức khỏe Docker* điền cột *Docker đang có vấn đề gì?*
 - **Đo** trên thẻ *RAM container* (`docker stats`) và **Phân tích** trên thẻ *Ổ đĩa thu hồi được* (`docker system df -v`) điền cột *Lãng phí ở đâu?*. Kết quả này cũng điền mục [Giải phóng bộ nhớ](#8-giải-phóng-bộ-nhớ) và mục [Ổ đĩa](#10-dọn-ổ-đĩa-an-toàn).
 - *Nên làm gì ngay?* tổng hợp từ những gì đã đo, và ghi rõ phần nào chưa xét.
 
-Sau khi bạn khởi động hay dừng gì đó, dòng tóm tắt báo số liệu đã cũ; bấm ↻ trên thẻ để cập nhật.
+Sau khi bạn khởi động hay dừng gì đó, dòng tóm tắt báo số liệu đã cũ; bấm ↻ để cập nhật.
 
 **Docker đang có vấn đề gì?** Điểm sức khỏe bắt đầu từ 100. Mỗi vấn đề trừ một số điểm cố định, không phải con số tùy ý, và mỗi dòng cho biết nguyên nhân, cách xử lý cùng một nút (mở nhật ký, xem lại & khởi động, chi tiết…). Rê chuột lên dòng để xem giải thích gốc của Docker. 90–100 là *Khỏe*, 70–89 *Cần chú ý*, dưới 70 *Không ổn*. Mục *Cách tính điểm* liệt kê mọi luật:
 
@@ -108,14 +108,14 @@ Muốn đổi ngưỡng nhàn rỗi: `DEV_MANAGER_IDLE_MINUTES=30 npm start`.
 
 ## 4. Khởi động, dừng, khởi động lại
 
-Dùng các nút trên mỗi card:
+Dùng các nút trên mỗi card: bước tiếp theo hiện bằng chữ, các nút còn lại là icon (rê chuột để xem tên).
 
 | Nút | Tác dụng | Dữ liệu của bạn |
 |---|---|---|
 | **▶ Khởi động** | Chạy lại các container sẵn có của dự án (`docker compose start`). Không bao giờ tạo lại container. | Giữ nguyên |
 | **■ Dừng** | Dừng các container (`docker compose stop`). | Giữ container và volume |
 | **↻ Khởi động lại** | Khởi động lại các container. | Giữ nguyên |
-| **›_ Terminal** | Mở Terminal tại thư mục dự án (nơi có file Compose). | Giữ nguyên |
+| **Terminal** | Mở Terminal tại thư mục dự án (nơi có file Compose). | Giữ nguyên |
 
 Trước mỗi thao tác, dashboard đều kiểm tra trước. Nếu không có vấn đề, thao tác chạy ngay. Nếu có, một cửa sổ xem lại sẽ mở ra:
 
@@ -128,20 +128,20 @@ Trước mỗi thao tác, dashboard đều kiểm tra trước. Nếu không có
 
 ### Điều khiển từng container
 
-Giống Docker Desktop, mỗi container có thể điều khiển riêng. Trên card, bấm **▸ N container** (hoặc mở **Chi tiết**). Mỗi container là một dòng gồm trạng thái, RAM và CPU (sau khi đã đo), các port trên máy (bấm vào để mở trong trình duyệt) và các nút: **▶ Khởi động** hoặc **■ Dừng**, **↻ Khởi động lại**, **≡ Nhật ký**, cùng hai nút Terminal:
+Giống Docker Desktop, mỗi container có thể điều khiển riêng. Trên card, bấm vào **thanh container** (hoặc mở **Chi tiết**). Mỗi container là một dòng gồm tên, bên dưới là trạng thái, RAM và CPU (sau khi đã đo) và các port trên máy (bấm vào để mở trong trình duyệt), cùng các nút: **▶ Khởi động** hoặc **■ Dừng**, **↻ Khởi động lại**, **Nhật ký**, và hai nút Terminal:
 
-- **›_** mở Terminal với shell bên trong container (`docker exec`, dùng bash nếu có), vào sẵn thư mục làm việc của nó, ví dụ `/var/www/api`. Chỉ dùng được khi container đang chạy.
-- **⌂** mở Terminal trên máy Mac tại thư mục mã nguồn của container, tức thư mục được gắn vào thư mục làm việc của nó, ví dụ `~/Projects/api`. Nút mờ khi mã nằm trong image hoặc volume.
+- Icon **terminal** mở Terminal với shell bên trong container (`docker exec`, dùng bash nếu có), vào sẵn thư mục làm việc của nó, ví dụ `/var/www/api`. Chỉ dùng được khi container đang chạy.
+- Icon **thư mục** mở Terminal trên máy Mac tại thư mục mã nguồn của container, tức thư mục được gắn vào thư mục làm việc của nó, ví dụ `~/Projects/api`. Nút mờ khi mã nằm trong image hoặc volume.
 
 
-- Mỗi trạng thái có màu, biểu tượng và chữ riêng, trên dòng container lẫn chip: **● Đang chạy** (xanh lá), **‖ Tạm dừng** (vàng), **■ Đã dừng** (xám), **✕ Lỗi** kèm mã thoát hoặc *Hết bộ nhớ* (đỏ), **↻ Đang khởi động lại** (đỏ, crash loop), **◐ Đang khởi động** và **○ Mới tạo** (xanh dương). Dừng với mã thông thường (0, 137, 143) được tính là đã dừng, không phải lỗi. Mỗi card dự án cũng có vạch màu theo trạng thái của dự án.
+- Mỗi trạng thái có màu, biểu tượng và chữ riêng trên dòng container, và cùng màu đó trên thanh container của card: **● Đang chạy** (xanh lá), **‖ Tạm dừng** (vàng), **■ Đã dừng** (xám), **✕ Lỗi** kèm mã thoát hoặc *Hết bộ nhớ* (đỏ), **↻ Đang khởi động lại** (đỏ, crash loop), **◐ Đang khởi động** và **○ Mới tạo** (xanh dương). Dừng với mã thông thường (0, 137, 143) được tính là đã dừng, không phải lỗi.
 - Các nút chạy `docker start`, `docker stop` hoặc `docker restart` trên đúng container đó. Các container khác vẫn chạy bình thường, và khởi động lại không kéo theo các service mà nó phụ thuộc.
 - Vẫn có bước kiểm tra trước. Dừng một container mà container khác cần (`depends_on`), hoặc gắn vào network mà dự án khác đang chạy dùng, hoặc thuộc dự án *luôn chạy*, sẽ mở cửa sổ xem lại trước, ví dụ *"app, worker phụ thuộc mariadb: vẫn chạy tiếp nhưng có thể lỗi cho đến khi mariadb chạy lại."*
 - Khởi động một container sẽ bị chặn khi port của nó đã bị chiếm hoặc network không còn, và có cảnh báo khi service nó phụ thuộc đang dừng.
 
 ## 5. Vì sao dự án không chạy?
 
-Card đã liệt kê các vấn đề quan trọng nhất. Bấm **Chi tiết** để xem đầy đủ:
+Card hiện vấn đề nghiêm trọng nhất ngay dưới tên dự án. Bấm vào tên để xem đầy đủ:
 
 ![Chi tiết dự án](images/vi-details.png)
 
@@ -159,7 +159,7 @@ Container có restart policy `unless-stopped` hoặc `always` mà đang dừng t
 
 ## 6. Xem nhật ký
 
-Bấm **Nhật ký** trên card, hoặc **Nhật ký** bên cạnh một vấn đề để mở thẳng đúng service đó.
+Bấm icon **Nhật ký** trên card, hoặc **Nhật ký** bên cạnh một vấn đề để mở thẳng đúng service đó.
 
 ![Nhật ký](images/vi-logs.png)
 
@@ -215,7 +215,7 @@ Port từ 49152 trở lên do macOS cấp ngẫu nhiên nên không bao giờ đ
 
 ## 10. Dọn ổ đĩa an toàn
 
-Mở **Ổ đĩa** và bấm **Phân tích ổ đĩa** (mất vài giây). Nút **Phân tích** trên thẻ *Ổ đĩa thu hồi được* cũng làm việc tương tự.
+Mở **Dọn ổ đĩa** và bấm **Phân tích ổ đĩa** (mất vài giây); nút **Phân tích** trên thẻ *Ổ đĩa thu hồi được* cũng làm việc tương tự. Ba bước chỉ đường: phân tích, xem rủi ro từng loại, rồi sao chép lệnh và tự chạy.
 
 ![Dung lượng ổ đĩa](images/vi-disk.png)
 

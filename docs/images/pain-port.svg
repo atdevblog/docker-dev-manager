@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="460" height="204" viewBox="0 0 460 204" role="img">
+<title>storefront — zsh</title>
+<rect x="0.5" y="0.5" width="459" height="203" rx="10" fill="#1A211E" stroke="#34423B"/>
+<path d="M0.5 30V10.5a10 10 0 0 1 10-10h439a10 10 0 0 1 10 10V30z" fill="#232C28"/>
+<line x1="0.5" y1="30" x2="459.5" y2="30" stroke="#34423B"/>
+<circle cx="18" cy="15.5" r="5" fill="#FF5F57"/><circle cx="34" cy="15.5" r="5" fill="#FEBC2E"/><circle cx="50" cy="15.5" r="5" fill="#28C840"/>
+<text x="230.0" y="19.5" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="11.5" fill="#8C9C94">storefront — zsh</text>
+<g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,DejaVu Sans Mono,monospace" font-size="12.5">
+<text x="16" y="50"><tspan fill="#8CC3AF">$ </tspan><tspan fill="#E6EEE9">docker compose up -d</tspan></text>
+<text x="16" y="68"><tspan fill="#74DDB0"> ✔ </tspan><tspan fill="#D8E2DC">Container storefront-redis-1  Started</tspan></text>
+<text x="16" y="86"><tspan fill="#FF8A95"> ✘ </tspan><tspan fill="#D8E2DC">Container storefront-db-1     </tspan><tspan fill="#FF8A95">Error</tspan></text>
+<text x="16" y="104"><tspan fill="#FF8A95">Error response from daemon: driver failed</tspan></text>
+<text x="16" y="122"><tspan fill="#FF8A95">programming external connectivity on endpoint</tspan></text>
+<text x="16" y="140"><tspan fill="#FF8A95">storefront-db-1: Bind for 0.0.0.0:5432 failed:</tspan></text>
+<text x="16" y="158"><tspan fill="#FF8A95">port is already allocated</tspan></text>
+<text x="16" y="176"><tspan fill="#8CC3AF">$ </tspan><tspan fill="#E6EEE9">lsof -i :5432</tspan><tspan fill="#8C9C94">   # …by whom?!</tspan></text>
+</g></svg>

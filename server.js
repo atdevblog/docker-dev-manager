@@ -49,7 +49,9 @@ function readStore() {
 }
 function readConfig() { const c=readStore(); return Array.isArray(c.projects) ? c.projects : []; }
 // language is '' when unset or no longer valid: the UI then falls back to Vietnamese.
-function readWorkspace() { const c=readStore(); return {keepRunning:Array.isArray(c.keepRunning)?c.keepRunning:[],language:I18N.valid(c.language)?c.language:''}; }
+// theme is '' when unset: the page then follows macOS light/dark mode.
+const THEMES=['light','dark'];
+function readWorkspace() { const c=readStore(); return {keepRunning:Array.isArray(c.keepRunning)?c.keepRunning:[],language:I18N.valid(c.language)?c.language:'',theme:THEMES.includes(c.theme)?c.theme:''}; }
 function validProject(p) {
   if (!p || typeof p!=='object' || typeof p.name!=='string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,49}$/.test(p.name)) throw appError('error.projectName');
   if (typeof p.directory !== 'string' || !path.isAbsolute(p.directory)) throw appError('error.directoryAbsolute');
@@ -65,9 +67,10 @@ function validProject(p) {
 function validWorkspace(w) {
   if (!w || typeof w!=='object') throw appError('error.workspace');
   if (w.language!==undefined && !I18N.valid(w.language)) throw appError('error.language');
+  if (w.theme!==undefined && w.theme!=='' && !THEMES.includes(w.theme)) throw appError('error.theme');
   const keep=w.keepRunning===undefined?[]:w.keepRunning;
   if (!Array.isArray(keep) || keep.length>100 || keep.some(n=>typeof n!=='string'||!NAME.test(n))) throw appError('error.keepRunningList');
-  return {keepRunning:[...new Set(keep)],...(w.language!==undefined?{language:w.language}:{})};
+  return {keepRunning:[...new Set(keep)],...(w.language!==undefined?{language:w.language}:{}),...(w.theme!==undefined?{theme:w.theme}:{})};
 }
 function writeJson(file,value) {
   fs.mkdirSync(CONFIG_DIR,{recursive:true,mode:0o700});
@@ -512,7 +515,7 @@ function staticFile(req,res,urlPath){
   let content=fs.readFileSync(path.join(STATIC_DIR,target));
   // The saved language goes into the page itself, so the first frame is already in that language
   // whatever this browser stored for this address (localhost and a proxy domain do not share storage).
-  if(target==='index.html'){let lang='';try{lang=readWorkspace().language;}catch{}content=content.toString('utf8').replace('<html lang="vi"',`<html lang="${lang||'vi'}" data-saved-lang="${lang}"`);}
+  if(target==='index.html'){let lang='',theme='';try{({language:lang,theme}=readWorkspace());}catch{}content=content.toString('utf8').replace('<html lang="vi"',`<html lang="${lang||'vi'}" data-saved-lang="${lang}"${theme?` data-theme="${theme}"`:''}`);}
   res.writeHead(200,{'Content-Type':mime[path.extname(target)],'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'",'X-Content-Type-Options':'nosniff','Cache-Control':target.startsWith('fonts/')?'public, max-age=31536000, immutable':'no-cache'});
   res.end(content);
 }

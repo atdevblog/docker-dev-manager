@@ -15,7 +15,7 @@ test('workspace and projects are saved without dropping each other or unknown ke
  S.writeConfig([...S.readConfig(),{name:'new',directory:'/y',composeFile:'c.yml'}]);
  const saved=JSON.parse(fs.readFileSync(FILE,'utf8'));
  assert.deepEqual(saved.projects.map(p=>p.name),['old','new']);assert.deepEqual(saved.keepRunning,['infra']);assert.equal(saved.groups[0].name,'legacy');
- assert.deepEqual(Object.keys(S.readWorkspace()).sort(),['keepRunning','language']);
+ assert.deepEqual(Object.keys(S.readWorkspace()).sort(),['keepRunning','language','theme']);
  assert.equal(fs.statSync(FILE).mode&0o777,0o600);
 });
 test('a corrupt config is never overwritten',()=>{
@@ -88,6 +88,9 @@ test('HTTP: new endpoints keep the host, origin and token rules',async()=>{
 test('language preference: stored in the config file, kept by other saves, survives a restart, invalid falls back',async()=>{
  assert.deepEqual(S.validWorkspace({language:'en'}),{keepRunning:[],language:'en'});
  assert.throws(()=>S.validWorkspace({language:'fr'}),e=>e.msg?.key==='error.language');
+ // Theme: light, dark, or '' to follow macOS; anything else is refused.
+ assert.deepEqual(S.validWorkspace({theme:'dark'}),{keepRunning:[],theme:'dark'});assert.deepEqual(S.validWorkspace({theme:''}),{keepRunning:[],theme:''});
+ assert.throws(()=>S.validWorkspace({theme:'blue'}),e=>e.msg?.key==='error.theme');
  fs.writeFileSync(FILE,JSON.stringify({projects:[],language:'fr'}));assert.equal(S.readWorkspace().language,'');
  fs.writeFileSync(FILE,JSON.stringify({projects:[{name:'p',directory:'/x',composeFile:'c.yml'}],language:'en'}));
  S.writeWorkspace(S.validWorkspace({keepRunning:['p']}));
@@ -106,6 +109,8 @@ test('language preference: stored in the config file, kept by other saves, survi
   const w=await (await fetch(base+'/api/workspace')).json();assert.equal(w.language,'vi');assert.deepEqual(w.keepRunning,['p']);
   // The page carries the saved language, so its first frame is right whatever the browser stored.
   assert.match(await (await fetch(base+'/')).text(),/<html lang="vi" data-saved-lang="vi"/);
+  S.writeWorkspace(S.validWorkspace({keepRunning:['p'],theme:'dark'}));assert.match(await (await fetch(base+'/')).text(),/data-saved-lang="vi" data-theme="dark"/);
+  S.writeWorkspace(S.validWorkspace({keepRunning:['p'],theme:''}));assert.doesNotMatch(await (await fetch(base+'/')).text(),/data-theme=/);
   const saved=fs.readFileSync(FILE);fs.writeFileSync(FILE,'{broken');
   try{const r=await fetch(base+'/');assert.equal(r.status,200,'a corrupt config never blocks the page');assert.match(await r.text(),/data-saved-lang=""/);}
   finally{fs.writeFileSync(FILE,saved);}

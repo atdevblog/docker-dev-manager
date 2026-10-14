@@ -41,8 +41,8 @@ function applyStatic(){
 // Re-renders from data already in memory: switching language never refetches or touches Docker.
 function rerender(){
  if(!loaded)return;
- renderEngine();updateCounters();renderGroups();renderProjects();renderSuggestions();renderStats();
- if(lastPorts)renderPortsData();if(lastDisk)renderDisk(lastDisk);renderAdvisorAll();
+ renderEngine();updateCounters();renderGroups();renderProjects();renderOverviewLists();renderContainers();renderSuggestions();renderStats();
+ if(lastPorts)renderPortsData();if(lastDisk)renderDisk(lastDisk);renderAdvisorAll();renderSteps();
 }
 // The choice lives in the config file (survives restarts, upgrades and other URLs such as a local
 // proxy domain) and in localStorage only to paint the first frame in the right language.
@@ -50,7 +50,7 @@ async function setLanguage(lang,persist=true){
  lang=I18N.valid(lang)?lang:I18N.FALLBACK;
  I=I18N.create(DICTS,lang,key=>{if(!missingKeys.has(key)){missingKeys.add(key);console.warn('Missing translation:',key);}});
  try{localStorage.setItem(LANGUAGE_KEY,lang);}catch{}
- applyStatic();rerender();if(!loaded)renderControls();
+ applyStatic();renderChrome();rerender();if(!loaded)renderControls();
  if(persist&&token&&workspace.language!==lang){try{workspace=await api('/api/workspace','PUT',{...workspace,language:lang});}catch(e){toast(e.message);}}
 }
 
@@ -66,7 +66,10 @@ async function api(url,method='GET',data,retried=false){
 function toast(message){const n=$('toast'),host=[...document.querySelectorAll('dialog[open]')].pop()||document.body;if(n.parentElement!==host)host.append(n);n.textContent=message;n.classList.remove('hidden');clearTimeout(toast.timer);toast.timer=setTimeout(()=>n.classList.add('hidden'),4500);}
 function alertMessage(message){$('alert').textContent=message;$('alert').classList.remove('hidden');}
 function el(tag,cls,text){const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;}
-function button(text,cls,fn,disabled=false,title=''){const b=el('button','btn '+cls,text);b.type='button';b.disabled=disabled;if(title)b.title=title;b.addEventListener('click',fn);return b;}
+// Lucide icons live in one inline sprite (index.html); a button may carry one before its words.
+const SVG_NS='http://www.w3.org/2000/svg';
+function icon(name){const s=document.createElementNS(SVG_NS,'svg'),u=document.createElementNS(SVG_NS,'use');s.setAttribute('class','ic');s.setAttribute('aria-hidden','true');u.setAttribute('href','#i-'+name);s.append(u);return s;}
+function button(text,cls,fn,disabled=false,title='',ic=''){const b=el('button','btn '+cls);if(ic)b.append(icon(ic));if(text)b.append(document.createTextNode(text));b.type='button';b.disabled=disabled;if(title)b.title=title;b.addEventListener('click',fn);return b;}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function fmtBytes(n){if(!(n>0))return '0 B';const u=['B','KiB','MiB','GiB','TiB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++;}return `${n>=100||!i?Math.round(n):n.toFixed(1)} ${u[i]}`;}
 function fmtDisk(n){if(!(n>0))return '0 B';const u=['B','kB','MB','GB','TB'];let i=0;while(n>=1000&&i<u.length-1){n/=1000;i++;}return `${n>=100||!i?Math.round(n):n.toFixed(1)} ${u[i]}`;}
@@ -79,7 +82,7 @@ const hasProblem=p=>p.issues.some(i=>i.level==='error'||i.level==='warn');
 async function refresh(){
  lastRefresh=Date.now();
  try{const data=await api('/api/state');projects=data.projects;groups=data.groups||[];workspace=data.workspace;dockerState=data.docker;loaded=true;$('alert').classList.add('hidden');
- renderEngine();updateCounters();renderGroups();renderProjects();}catch(e){alertMessage(e.message);}
+ renderEngine();updateCounters();renderGroups();renderProjects();renderOverviewLists();renderContainers();}catch(e){alertMessage(e.message);}
 }
 function renderEngine(){
  if(!dockerState)return;const online=dockerState.available;
@@ -93,7 +96,8 @@ function setStatus(node,level,text){node.className='status '+level;node.replaceC
 function setMeter(node,ratio,severity){const pct=Math.max(0,Math.min(100,Math.round(ratio*100)));node.className='meter '+severity;node.firstChild.style.width=pct+'%';node.setAttribute('aria-valuenow',String(pct));}
 function setValue(node,main,unit){node.replaceChildren(document.createTextNode(String(main)),...(unit?[el('small','',unit)]:[]));}
 function renderHealthTile(){
- const status=$('healthStatus'),h=opened.has('health')&&advice?.parts?.health?advice.health:null;
+ const status=$('healthStatus'),h=opened.has('health')&&advice?.parts?.health?advice.health:null,ring=$('healthRing');
+ ring.style.setProperty('--p',h?h.score:0);ring.className='ring'+(h?' '+h.grade:'');
  if(dockerState&&!dockerState.available){setValue($('healthValue'),0,'/100');setStatus(status,'poor',t('metric.engineOffline'));$('healthSub').textContent=t('engine.startDesktop');}
  else if(!h){setValue($('healthValue'),'—');status.replaceChildren();$('healthSub').textContent=t(working.has('health')?'advisor.checking':'metric.notChecked');}
  else{setValue($('healthValue'),h.score,'/100');setStatus(status,h.grade,t(GRADE_KEYS[h.grade]));
@@ -112,6 +116,7 @@ function updateCounters(){
  const containers=running.reduce((n,p)=>n+p.running,0),attention=projects.filter(hasProblem).length;
  setValue($('runningCount'),running.length,` / ${projects.length}`);
  $('containerCount').textContent=attention?t('metric.runningAttention',{containers,count:attention}):t('metric.containersRunning',{count:containers});
+ $('navProjectsCount').textContent=projects.length||'';$('navContainersCount').textContent=projects.reduce((n,p)=>n+p.containers.filter(c=>!c.oneoff).length,0)||'';
  $('allCount').textContent=projects.length;$('runningChip').textContent=running.length;$('issuesCount').textContent=projects.filter(hasProblem).length;
  $('managedCount').textContent=projects.filter(p=>p.managed).length;$('discoveredCount').textContent=projects.filter(p=>!p.managed).length;
  // Also the summary of the projects heading, so a collapsed section still tells how things stand.
@@ -121,6 +126,7 @@ function updateCounters(){
 // Both memory tiles express CPU in cores so the Docker share and the whole Mac compare directly.
 // This Mac is polled (cheap); container RAM needs `docker stats`, measured on a click.
 function renderOverview(){
+ renderMemoryChart();
  const vm=hostData?.vm||resources?.vm||{},host=hostData?.host||resources?.host,cores=vm.ncpu||host?.cores||'?';
  if(resources){
   const tot=resources.totals;setValue($('memoryUsed'),fmtBytes(tot.memBytes));
@@ -152,40 +158,68 @@ function renderProjects(){
  if(!filtered.length){const empty=el('div','empty');empty.append(el('h3','',t(all.length?'projects.noMatchesTitle':'projects.emptyTitle')),el('p','',t(all.length?'projects.noMatchesHint':'projects.emptyHint')));grid.append(empty);return;}
  for(const p of filtered)grid.append(projectCard(p));
 }
+// A card reads as a summary: name and status, the one thing that needs attention, how its containers stand.
+// The rest waits one click away: the container list opens in place, paths and every problem are in Details.
 function projectCard(p){
- const card=el('article','project st-'+p.status+(p.issues.some(i=>i.level==='error')?' attention':''));
- // The name is the way into the details, the most common next step after reading a card.
- const head=el('div','projtitle'),h3=el('h3'),open=el('button','projlink');open.type='button';open.title=t('card.openDetails',{project:p.name});
- open.append(el('span','projicon','▣'),el('span','projname',p.name));open.addEventListener('click',()=>inspectProject(p));h3.append(open);
+ const card=el('article','project st-'+p.status),core=p.containers.filter(c=>!c.oneoff);
+ // The name opens the details; its tooltip says how the project was found and where it lives.
+ const head=el('div','projtitle'),h3=el('h3'),open=el('button','projlink');open.type='button';
+ const where=p.directory?`${p.directory}${p.composeFile?' / '+p.composeFile:''}`:p.sources.length>1?t('card.workingDirs',{count:p.sources.length}):t('card.pathUnavailable');
+ open.title=`${t('card.openDetails',{project:p.name})}\n${t(p.managed?'card.managed':'card.discovered')} · ${where}`;
+ const pic=el('span','projicon');pic.append(icon('box'));open.append(pic,el('span','projname',p.name));open.addEventListener('click',()=>inspectProject(p));h3.append(open);
  head.append(h3,el('span','pill '+p.status,t(STATUS_KEYS[p.status]||'status.unknown')));card.append(head);
- const badges=el('div','badgerow');badges.append(el('span','typebadge '+(p.managed?'ismanaged':'isdiscovered'),(p.managed?'● ':'◌ ')+t(p.managed?'card.managed':'card.discovered')),el('span','smalltext',t('card.runningOf',{running:p.running,total:p.total})));
- const usage=usageOf(p.name);if(usage)badges.append(el('span','smalltext',t('metric.ram',{size:fmtBytes(usage.memBytes)})));
- if(p.sources.length>1)badges.append(el('span','typebadge warnbadge',t('card.sources',{count:p.sources.length})));
- if(workspace.keepRunning.includes(p.name))badges.append(el('span','typebadge ismanaged','★ '+t('card.keepRunning')));
- // Only a description someone wrote is shown: the type badge already says how the project was found.
- card.append(badges);if(p.description)card.append(el('p','projdesc',p.description));
- card.append(el('div','path',p.directory?`${p.directory}${p.composeFile?' / '+p.composeFile:''}`:p.sources.length>1?t('card.workingDirs',{count:p.sources.length}):t('card.pathUnavailable')));
- if(p.issues.length){const box=el('div','issues');p.issues.slice(0,3).forEach(i=>box.append(issueLine(p,i)));if(p.issues.length>3)box.append(button(t('card.moreIssues',{count:p.issues.length-3}),'link',()=>inspectProject(p)));card.append(box);}
- const core=p.containers.filter(c=>!c.oneoff);
- if(core.length){
-  // Closed: one chip per service as a status glance. Open: every container with its own controls.
-  // Cards are rebuilt on every refresh, so the open state is remembered per project.
-  const fold=el('details','containerfold'),summary=el('summary'),services=el('span','services');fold.open=openFolds.has(p.name);
-  fold.addEventListener('toggle',()=>{if(fold.open)openFolds.add(p.name);else openFolds.delete(p.name);storeList('ddm.openFolds',openFolds);});
-  core.slice(0,6).forEach(c=>{const chip=el('span','servicechip',c.service||c.name);chip.prepend(el('i',stateDot(c)));chip.title=stateLabel(c);services.append(chip);});
-  if(core.length>6)services.append(el('span','smalltext',t('common.more',{count:core.length-6})));
-  summary.title=t('container.foldTitle');summary.append(el('span','foldlabel',t('container.summary',{count:core.length})),services);
-  const list=el('ul','containerlist');[...core].sort((x,y)=>(x.service||x.name).localeCompare(y.service||y.name)).forEach(c=>list.append(containerRow(p,c)));
-  fold.append(summary,list);card.append(fold);
- }
- const a=el('div','actions'),blocked=busy.has(p.name);
- if(!p.total&&p.managed)a.append(button('⇡ '+t('action.up'),'primary',()=>act('up',[p.name]),blocked,t('card.upTitle')));
- else a.append(button('▶ '+t('action.start'),'primary',()=>act('start',[p.name]),blocked||!p.total||p.running===p.total,t('card.startTitle')));
- a.append(button('■ '+t('action.stop'),'secondary',()=>act('stop',[p.name]),blocked||!p.running),button('↻ '+t('action.restart'),'secondary',()=>act('restart',[p.name]),blocked||!p.running));
+ // Every card has the same shape: name, one line, the container bar, the buttons. The line carries the most
+ // useful thing to know: a problem, else the description, else where the project lives; tags follow it.
+ const sub=el('div','projsub'),part=(ic,text,cls='')=>{const x=el('span',cls);x.append(icon(ic),el('span','',text));sub.append(x);return x;};
+ const issue=[...p.issues].sort((a,b)=>issueRank(a.level)-issueRank(b.level))[0];
+ if(issue){
+  const lead=part(issue.level==='error'?'circle-x':issue.level==='warn'?'triangle-alert':'info',tr(issue.text),'lead problem '+issue.level);lead.title=`${tr(issue.text)}\n${tr(issue.hint)}`;
+  if(issue.service&&p.containers.some(c=>c.service===issue.service))sub.append(button(t('action.log'),'link',()=>openLogs(p.name,issue.service)));
+  if(p.issues.length>1){const more=button(t('common.more',{count:p.issues.length-1}),'link',()=>inspectProject(p));more.title=t('card.moreIssues',{count:p.issues.length-1});sub.append(more);}
+ }else if(p.description)part('info',p.description,'lead').title=p.description;
+ else if(p.sources.length<2)part('folder',p.directory?shortPath(p.directory):t('card.pathUnavailable'),'lead').title=where;
+ if(p.sources.length>1)part('folder-search',t('card.sources',{count:p.sources.length}),'tagwarn').title=t('card.workingDirs',{count:p.sources.length});
+ if(p.managed)part('circle-check',t('card.managed'));
+ if(workspace.keepRunning.includes(p.name))part('star',t('card.keepRunning'));
+ card.append(sub);
+ card.append(...stateRow(p,core),projActions(p));
+ return card;
+}
+// Home folders read as ~ (macOS /Users/name, Linux /home/name).
+const shortPath=dir=>dir.replace(/^\/(Users|home)\/[^/]+(?=\/|$)/,'~');
+const issueRank=level=>level==='error'?0:level==='warn'?1:2;
+const stateCounts=list=>{const n={ok:0,warn:0,bad:0,off:0};for(const c of list)n[CHART_STATE[containerState(c)]||'off']++;return n;};
+// The same bar as the overview chart. A click opens every container with its own controls, like Docker Desktop;
+// cards are rebuilt on every refresh, so the open state is remembered per project.
+function stateRow(p,core){
+ const usage=usageOf(p.name),text=[t('card.runningOf',{running:p.running,total:p.total}),usage?.memBytes>0?t('metric.ram',{size:fmtBytes(usage.memBytes)}):''].filter(Boolean).join(' · ');
+ if(!core.length){const row=el('div','statebar none');row.append(el('span','statetext',t('card.noContainers')));return [row];}
+ const n=stateCounts(core),listId='containers-'+p.name.replace(/[^\w-]/g,'_'),toggle=el('button','statebar'),top=el('span','statetop'),bar=el('span','minibar'),list=el('ul','containerlist');
+ toggle.type='button';toggle.title=t('container.foldTitle');toggle.setAttribute('aria-controls',listId);list.id=listId;
+ top.append(el('span','statetext',text),el('span','srtext',t('container.summary',{count:core.length})),icon('chevron-right'));
+ bar.setAttribute('aria-hidden','true');for(const [k] of CHART_SERIES)if(n[k]){const seg=el('span','s-'+k);seg.style.flex=`${n[k]} 1 0`;bar.append(seg);}
+ toggle.append(top,bar);
+ attachTip(bar,null,()=>[t('container.summary',{count:core.length}),CHART_SERIES.filter(([k])=>n[k]).map(([k,key])=>tipRow('s-'+k,t(key),String(n[k])))]);
+ [...core].sort((x,y)=>(x.service||x.name).localeCompare(y.service||y.name)).forEach(c=>list.append(containerRow(p,c)));
+ const show=on=>{list.hidden=!on;toggle.setAttribute('aria-expanded',String(on));};show(openFolds.has(p.name));
+ toggle.addEventListener('click',()=>{const on=list.hidden;show(on);if(on)openFolds.add(p.name);else openFolds.delete(p.name);storeList('ddm.openFolds',openFolds);});
+ return [toggle,list];
+}
+// One next step in words; the rest are quiet icons with tooltips, shown only when they can do something.
+function projActions(p){
+ const foot=el('div','cardfoot'),quiet=el('div','quiet'),blocked=busy.has(p.name),full=p.total>0&&p.running===p.total;
+ const ghost=(ic,label,fn,{off=false,title=''}={})=>{const b=iconButton(ic,label,fn,off);b.classList.replace('mini','ghost');if(title)b.title=title;return b;};
+ if(!p.total&&p.managed)foot.append(button(t('action.up'),'tonal',()=>act('up',[p.name]),blocked,t('card.upTitle'),'circle-arrow-up'));
+ else if(full)foot.append(button(t('action.stop'),'tonal neutral',()=>act('stop',[p.name]),blocked,'','square'));
+ else if(p.total)foot.append(button(t('action.start'),'tonal',()=>act('start',[p.name]),blocked,t('card.startTitle'),'play'));
+ if(p.running&&!full)quiet.append(ghost('square',t('action.stop'),()=>act('stop',[p.name]),{off:blocked}));
+ if(p.running)quiet.append(ghost('rotate-cw',t('action.restart'),()=>act('restart',[p.name]),{off:blocked}));
+ if(p.total)quiet.append(ghost('scroll-text',t('action.logs'),()=>openLogs(p.name)));
  // Terminal opens at the project's folder (the largest source when it was started from several).
  const dir=[p.directory,...p.sources.map(x=>x.directory)].find(Boolean);
- a.append(button('≡ '+t('action.logs'),'secondary',()=>openLogs(p.name),!p.total),button('›_ '+t('action.terminal'),'secondary',()=>openIn(p,'terminal',dir),!dir,dir?t('card.terminalTitle',{path:dir}):t('card.noFolder')),button('ⓘ '+t('action.details'),'secondary',()=>inspectProject(p)));
- card.append(a);return card;
+ quiet.append(ghost('square-terminal',t('action.terminal'),()=>openIn(p,'terminal',dir),{off:!dir,title:dir?t('card.terminalTitle',{path:dir}):t('card.noFolder')}),
+  ghost('info',t('action.details'),()=>inspectProject(p)));
+ foot.append(quiet);return foot;
 }
 // One visual state per container: colour, icon and words together, never colour alone.
 // Exit codes of a normal stop (docker stop sends SIGTERM, then SIGKILL) read as stopped, not failed.
@@ -206,17 +240,17 @@ function stateBadge(c){
  return badge;
 }
 const stateDot=c=>'cs-'+containerState(c);
-function iconButton(glyph,label,fn,disabled){const b=button(glyph,'mini',fn,disabled,label);b.setAttribute('aria-label',label);return b;}
+function iconButton(name,label,fn,disabled){const b=button('','mini',fn,disabled,label,name);b.setAttribute('aria-label',label);return b;}
 // Docker Desktop-style row controls for one container.
 function containerButtons(p,c){
  const name=c.service||c.name,active=['running','restarting','paused'].includes(c.state),blocked=busy.has(p.name)||busyContainers.has(c.id),box=el('span','rowactions');
- const main=active?iconButton('■',t('container.stop',{container:name}),()=>actContainer('stop',p,c),blocked):iconButton('▶',t('container.start',{container:name}),()=>actContainer('start',p,c),blocked);
+ const main=active?iconButton('square',t('container.stop',{container:name}),()=>actContainer('stop',p,c),blocked):iconButton('play',t('container.start',{container:name}),()=>actContainer('start',p,c),blocked);
  main.classList.add(active?'act-stop':'act-start');
  box.append(main,
-  iconButton('↻',t('container.restart',{container:name}),()=>actContainer('restart',p,c),blocked||!active),
-  iconButton('≡',t('container.logs',{container:name}),()=>openLogs(p.name,c.service),!c.service),
-  iconButton('›_',t(c.state==='running'?'container.shell':'container.shellOff',{container:name}),()=>openTerminal(p,c,'shell'),c.state!=='running'),
-  iconButton('⌂',c.sourceDir?t('container.folder',{path:c.sourceDir}):t('container.folderNone',{container:name}),()=>openTerminal(p,c,'folder'),!c.sourceDir));
+  iconButton('rotate-cw',t('container.restart',{container:name}),()=>actContainer('restart',p,c),blocked||!active),
+  iconButton('scroll-text',t('container.logs',{container:name}),()=>openLogs(p.name,c.service),!c.service),
+  iconButton('square-terminal',t(c.state==='running'?'container.shell':'container.shellOff',{container:name}),()=>openTerminal(p,c,'shell'),c.state!=='running'),
+  iconButton('folder-open',c.sourceDir?t('container.folder',{path:c.sourceDir}):t('container.folderNone',{container:name}),()=>openTerminal(p,c,'folder'),!c.sourceDir));
  return box;
 }
 // A shell inside the container (docker exec), or Terminal at its source folder on this Mac.
@@ -224,16 +258,17 @@ async function openTerminal(p,c,mode){
  try{await api(`/api/projects/${encodeURIComponent(p.name)}/containers/${c.id}/terminal`,'POST',{mode});toast(t(mode==='shell'?'toast.shellOpened':'toast.folderOpened',{container:c.service||c.name,path:c.sourceDir}));}
  catch(e){toast(e.message);}
 }
+// Host ports open the app in the browser, as Docker Desktop's port links do.
+const uniquePorts=c=>[...new Set(c.ports.filter(b=>b.proto==='tcp').map(b=>b.port))].sort((x,y)=>x-y);
+function portLink(port){const link=el('a','portlink',String(port));link.href=`${port===443?'https':'http'}://localhost:${port}`;link.target='_blank';link.rel='noopener noreferrer';link.title=t('container.openPort',{port});return link;}
 function containerRow(p,c){
- const row=el('li','containerrow '+stateDot(c)),main=el('div','containermain'),head=el('div','containerhead'),title=el('strong','',c.service||c.name),meta=el('span','smalltext');title.title=`${c.name} · ${c.image}`;
- head.append(title,stateBadge(c));
+ // The name gets the whole first line; state, usage and ports sit under it, so narrow cards never cut the name.
+ const row=el('li','containerrow '+stateDot(c)),main=el('div','containermain'),title=el('strong','',c.service||c.name),meta=el('span','containermeta smalltext');title.title=`${c.name} · ${c.image}`;
+ meta.append(stateBadge(c));
  const usage=resources?.containers.find(s=>String(s.id).slice(0,12)===c.id);
- if(c.state==='running'&&usage)meta.append(t('container.usage',{size:fmtBytes(usage.memBytes),cpu:usage.cpuPercent.toFixed(1)}));
- // Host ports open the app in the browser, as Docker Desktop's port links do.
- for(const port of [...new Set(c.ports.filter(b=>b.proto==='tcp').map(b=>b.port))].sort((x,y)=>x-y)){
-  const link=el('a','portlink',String(port));link.href=`${port===443?'https':'http'}://localhost:${port}`;link.target='_blank';link.rel='noopener noreferrer';link.title=t('container.openPort',{port});meta.append(meta.childNodes.length?' ':'',link);
- }
- main.append(head);if(meta.childNodes.length)main.append(meta);row.append(main,containerButtons(p,c));
+ if(c.state==='running'&&usage)meta.append(el('span','',t('container.usage',{size:fmtBytes(usage.memBytes),cpu:usage.cpuPercent.toFixed(1)})));
+ for(const port of uniquePorts(c))meta.append(portLink(port));
+ main.append(title,meta);row.append(main,containerButtons(p,c));
  return row;
 }
 // Same preflight as projects: a clean action runs at once, anything with a warning is reviewed first.
@@ -252,7 +287,7 @@ async function runContainer(action,p,c){
  finally{busyContainers.delete(c.id);await refresh();showProject(p.name);afterChange();}
 }
 // Redraws the cards and, when it shows this project, the open details dialog.
-function showProject(name){renderProjects();const p=byName(name);if(p&&$('inspectDialog').open&&$('inspectTitle').textContent===name)inspectProject(p);}
+function showProject(name){renderProjects();renderContainers();renderOverviewLists();const p=byName(name);if(p&&$('inspectDialog').open&&$('inspectTitle').textContent===name)inspectProject(p);}
 function issueLine(p,i){
  const row=el('div','issue '+i.level);row.title=tr(i.hint);
  row.append(el('span','issuetext',tr(i.text)));
@@ -333,13 +368,13 @@ async function openIn(p,app,directory){try{await api(`/api/projects/${encodeURIC
 function inspectProject(p){
  const dialog=$('inspectDialog'),close=()=>dialog.close();$('inspectTitle').textContent=p.name;
  const actions=$('inspectActions');actions.replaceChildren();
- if(p.importable&&!p.managed)actions.append(button('＋ '+t('action.import'),'primary',()=>importProject(p),false,t('details.importTitle')));
- if(p.managed)actions.append(button('⇡ '+t('action.up'),'secondary',()=>{close();act('up',[p.name]);},busy.has(p.name)||!p.composeFileOk),button('⚙ '+t('action.edit'),'subtle',()=>{close();openProject(p);}),button('⋯ '+t('action.down'),'danger',()=>{close();act('down',[p.name]);},busy.has(p.name)||!p.total||!p.composeFileOk));
+ if(p.importable&&!p.managed)actions.append(button(t('action.import'),'primary',()=>importProject(p),false,t('details.importTitle'),'plus'));
+ if(p.managed)actions.append(button(t('action.up'),'secondary',()=>{close();act('up',[p.name]);},busy.has(p.name)||!p.composeFileOk,'','circle-arrow-up'),button(t('action.edit'),'subtle',()=>{close();openProject(p);},false,'','pencil'),button(t('action.down'),'danger',()=>{close();act('down',[p.name]);},busy.has(p.name)||!p.total||!p.composeFileOk,'','trash-2'));
  const kept=workspace.keepRunning.includes(p.name);
- actions.append(button((kept?'☆ ':'★ ')+t(kept?'action.unkeep':'action.keep'),'subtle',()=>toggleKeep(p.name),false,t('details.keepTitle')));
+ actions.append(button(t(kept?'action.unkeep':'action.keep'),'subtle',()=>toggleKeep(p.name),false,t('details.keepTitle'),'star'));
  const dirs=[...new Set([p.directory,...p.sources.map(s=>s.directory)].filter(Boolean))];
  // Application names are product names and stay as they are in every language.
- if(dirs.length)[['finder','⌂ Finder'],['terminal','› Terminal'],['vscode','✎ VS Code']].forEach(([app,label])=>actions.append(button(label,'subtle',()=>openIn(p,app,dirs[0]),false,t('details.openTitle',{path:dirs[0]}))));
+ if(dirs.length)[['finder','Finder','folder'],['terminal','Terminal','square-terminal'],['vscode','VS Code','code']].forEach(([app,label,ic])=>actions.append(button(label,'subtle',()=>openIn(p,app,dirs[0]),false,t('details.openTitle',{path:dirs[0]}),ic)));
  const target=$('inspectContent');target.replaceChildren();
  const makeRow=(key,value)=>{const row=el('div','detailrow');row.append(el('strong','',key),el('span','',String(value||'—')));target.append(row);};
  makeRow(t('details.status'),[t('details.statusValue',{status:t(STATUS_KEYS[p.status]||'status.unknown'),running:p.running,total:p.total}),p.oneoffs?t('details.oneoffs',{count:p.oneoffs}):''].filter(Boolean).join(' · '));
@@ -365,7 +400,7 @@ function inspectProject(p){
   target.append(el('p','footnote',t('details.limitsFootnote')));
  }
  target.append(el('h4','detailhead',t('details.terminal')));
- for(const c of p.commands){const row=el('div','cmdrow');row.append(el('span','smalltext',tr(c.label)),el('code','',c.command),button('⧉','mini',()=>copy(c.command),false,t('common.copy')));target.append(row);}
+ for(const c of p.commands){const row=el('div','cmdrow');row.append(el('span','smalltext',tr(c.label)),el('code','',c.command),iconButton('copy',t('common.copy'),()=>copy(c.command),false));target.append(row);}
  if(!dialog.open)dialog.showModal();
 }
 function openProject(p){editing=p?.name||null;$('dialogTitle').textContent=editing?t('form.editTitle',{project:editing}):t('form.addTitle');const f=$('projectForm');f.reset();for(const field of ['name','directory','composeFile','description'])if(p)f.elements[field].value=p[field]||'';f.elements.name.disabled=!!editing;updateDescCount();formError('');$('projectDialog').showModal();}
@@ -400,7 +435,7 @@ function renderGroups(){
  for(const g of groups){
   const members=g.projects.filter(byName),running=members.filter(n=>byName(n).running>0),needs=g.projects.filter(n=>n!==g.name);
   const chip=el('div','groupchip');chip.append(el('strong','',g.name),el('span','smalltext',`${t('groups.with',{projects:needs})} · ${t('groups.runningOf',{running:running.length,total:g.projects.length})}`));
-  chip.append(button('▶','mini',()=>act('start',members,{title:t('groups.startPlan',{group:g.name}),review:true}),running.length===members.length,t('groups.startTitle')),button('■','mini',()=>act('stop',running,{title:t('groups.stopPlan',{group:g.name}),review:true}),!running.length,t('groups.stopTitle')));
+  chip.append(iconButton('play',t('groups.startTitle'),()=>act('start',members,{title:t('groups.startPlan',{group:g.name}),review:true}),running.length===members.length),iconButton('square',t('groups.stopTitle'),()=>act('stop',running,{title:t('groups.stopPlan',{group:g.name}),review:true}),!running.length));
   list.append(chip);
  }
 }
@@ -412,7 +447,7 @@ async function refreshResources(){
  if(working.has('stats'))return;working.add('stats');renderControls();renderOverview();renderSuggestions();
  try{resources=await api('/api/resources');opened.add('stats');staleParts.delete('stats');}
  catch(e){working.delete('stats');renderControls();renderOverview();return renderSuggestions(e.message);}
- working.delete('stats');renderControls();updateCounters();renderSuggestions();renderStats();renderProjects();await compose();
+ working.delete('stats');renderControls();updateCounters();renderSuggestions();renderStats();renderProjects();renderContainers();renderOverviewLists();await compose();
 }
 function messageRow(tbody,text,cols){const row=el('tr'),td=el('td','',text);td.colSpan=cols;row.append(td);tbody.replaceChildren(row);}
 function renderSuggestions(error){
@@ -435,7 +470,7 @@ function renderSuggestions(error){
   row.append(check,el('td','',r.name),el('td','',fmtBytes(r.memBytes)),el('td','',r.cpuPercent.toFixed(1)+'%'),el('td','',fmtSince(r.since)),notes);return row;
  }));
 }
-function updateStopSelected(){const n=selectedStops.size;$('stopSelected').disabled=!n;$('stopSelected').textContent='■ '+(n?t('resources.stopN',{count:n}):t('resources.stopSelected'));}
+function updateStopSelected(){const n=selectedStops.size,b=$('stopSelected');b.disabled=!n;b.replaceChildren(icon('square'),document.createTextNode(n?t('resources.stopN',{count:n}):t('resources.stopSelected')));}
 function renderStats(){
  const tbody=$('statsRows');if(!resources)return messageRow(tbody,t('resources.notMeasured'),6);if(!resources.containers.length)return messageRow(tbody,t('resources.noContainers'),6);
  tbody.replaceChildren(...[...resources.containers].sort((a,b)=>b.cpuPercent-a.cpuPercent).map(c=>{const row=el('tr');[c.name,c.project||t('common.standalone'),c.cpu,c.memory,c.memoryPercent,c.netIO].forEach(v=>row.append(el('td','',v||'—')));return row;}));
@@ -456,16 +491,19 @@ document.querySelectorAll('.advisorscroll').forEach(s=>s.addEventListener('scrol
 window.addEventListener('resize',updateFades);
 const PART_KEYS={health:['advisor.check','advisor.checking','advisor.recheck'],stats:['advisor.measure','metric.measuring','advisor.remeasure'],disk:['advisor.analyze','advisor.analyzing','advisor.reanalyze']};
 const PART_NAME_KEYS={health:'advisor.partHealth',stats:'advisor.partStats',disk:'advisor.partDisk'};
+const PART_ICON={health:'stethoscope',stats:'gauge',disk:'scan-search'};
 // Measurements run from the tiles at the top; the advisor columns below only show their results.
 // A tile's button reads its verb before the first run, "…ing" while it runs, and "↻ again" afterwards.
 function setPartButton(b,part){
  const [run,busyKey,again]=PART_KEYS[part],now=working.has(part),done=opened.has(part);
- b.textContent=now?t(busyKey):done?'↻ '+t(again):t(run);b.disabled=now;b.classList.toggle('primary',!done&&!now);b.classList.toggle('stalebtn',done&&staleParts.has(part));
+ b.replaceChildren(icon(done&&!now?'refresh-cw':PART_ICON[part]),document.createTextNode(now?t(busyKey):done?t(again):t(run)));b.disabled=now;b.classList.toggle('primary',!done&&!now);b.classList.toggle('stalebtn',done&&staleParts.has(part));
  if(done&&!now){b.title=t(again);b.setAttribute('aria-label',t(again));}else{b.removeAttribute('title');b.removeAttribute('aria-label');}
  return b;
 }
 function renderControls(){
  setPartButton($('checkHealthTile'),'health');setPartButton($('measureTile'),'stats');setPartButton($('diskTile'),'disk');
+ // Each page measures from its own header too: Health, Containers.
+ setPartButton($('hcCheck'),'health');setPartButton($('hcMeasure'),'stats');setPartButton($('hcDisk'),'disk');setPartButton($('containersMeasure'),'stats');
  $('refreshStats').disabled=working.has('stats');$('analyzeDisk').disabled=working.has('disk');
 }
 // Cheap: recombines the parts already measured. It never starts `docker stats` or `system df` itself.
@@ -482,7 +520,7 @@ function renderAdvisorAll(){renderControls();renderHealthTile();renderAdvisor();
 // cheap health check runs again, so its problems are current; Measure and Analyze wait for a click.
 async function restoreMeasurements(){
  let m;try{m=await api('/api/measured');}catch{return;}
- if(m.resources){resources=m.resources;opened.add('stats');updateCounters();renderSuggestions();renderStats();renderProjects();}
+ if(m.resources){resources=m.resources;opened.add('stats');updateCounters();renderSuggestions();renderStats();renderProjects();renderContainers();renderOverviewLists();}
  if(m.disk){renderDisk(m.disk);opened.add('disk');}
  if(m.healthAt)opened.add('health');
  if(opened.size)await compose();
@@ -490,8 +528,8 @@ async function restoreMeasurements(){
 // Every advisor action reuses an existing flow, so starting or stopping always goes through the review dialog.
 function advisorButton(a){
  const run=a&&{logs:()=>openLogs(a.project,a.service||''),details:()=>{const p=byName(a.project);if(p)inspectProject(p);},start:()=>act('start',a.projects,{review:true}),
-  stop:()=>act('stop',a.projects,{title:t('resources.stopPlan'),review:true}),copy:()=>copy(a.command),ports:()=>{go('navPorts','ports');loadPorts($('portInput').value.trim());},
-  memory:()=>go('navResources','resources'),disk:()=>go('navDisk','disk'),refresh:()=>{refresh();checkHealth();}}[a.type];
+  stop:()=>act('stop',a.projects,{title:t('resources.stopPlan'),review:true}),copy:()=>copy(a.command),ports:()=>go('ports'),
+  memory:()=>go('resources'),disk:()=>go('cleanup'),refresh:()=>{refresh();checkHealth();}}[a.type];
  return run?button(t(BTN_KEYS[a.type]),'mini',run):null;
 }
 function riskChip(r){const level=riskLevel(r);return el('span','risk '+RISK_CLASS[level],t(RISK_KEYS[level]));}
@@ -537,6 +575,7 @@ function renderAdvisor(){
  requestAnimationFrame(updateFades);
 }
 $('checkHealthTile').onclick=checkHealth;$('measureTile').onclick=refreshResources;$('diskTile').onclick=analyzeDisk;
+$('hcCheck').onclick=checkHealth;$('hcMeasure').onclick=refreshResources;$('hcDisk').onclick=analyzeDisk;$('containersMeasure').onclick=refreshResources;
 
 const DEFAULT_PORTS=[80,443,3000,3306,4200,5000,5173,5432,6379,8000,8025,8069,8080,9000];
 const bindText=ip=>ip==='0.0.0.0'?t('ports.allInterfaces'):ip;
@@ -619,7 +658,7 @@ function renderDisk(d){
  ['col.type','col.count','col.size','col.reclaimable','col.risk','col.todo'].forEach(k=>head.append(el('th','',t(k))));thead.append(head);
  for(const r of d.rows){
   const row=el('tr'),todo=el('td','notes');todo.append(el('div','',tr(r.note)));
-  for(const c of r.commands){const line=el('div','cmdrow');line.append(el('span','smalltext',tr(c.label)),el('code','',c.command),button('⧉','mini',()=>copy(c.command),false,t('common.copy')));todo.append(line);}
+  for(const c of r.commands){const line=el('div','cmdrow');line.append(el('span','smalltext',tr(c.label)),el('code','',c.command),iconButton('copy',t('common.copy'),()=>copy(c.command),false));todo.append(line);}
   row.append(el('td','',tr(r.label)),el('td','',String(r.count)),el('td','',fmtDisk(r.size)),el('td','',r.risk==='data'?'—':fmtDisk(r.reclaimable)));
   const risk=el('td');risk.append(el('span','risk '+RISK[r.risk][1],t(RISK[r.risk][0])));row.append(risk,todo);tbody.append(row);
  }
@@ -634,8 +673,10 @@ function renderDisk(d){
   const vw=el('div','tablewrap'),foot=el('p','footnote');renderRich(foot,t('disk.inspectFoot'));vt.append(el('thead'),vb);vt.firstChild.append(vh);vw.append(vt);fold.append(vw,foot);nodes.push(fold);
  }
  nodes.push(el('p','footnote',t('disk.measured',{time:new Date(d.generatedAt).toLocaleTimeString(I.lang)})));
- target.replaceChildren(...nodes);
+ target.replaceChildren(...nodes);renderSteps();
 }
+// Cleanup is a guided path: analyze, review each risk, then copy a command and run it by hand.
+function renderSteps(){const done=!!lastDisk;document.querySelectorAll('#cleanupSteps li').forEach(li=>{const s=Number(li.dataset.step);li.classList.toggle('done',s===1&&done);li.classList.toggle('current',done?s===2:s===1);});}
 
 async function openLogs(name,service=''){
  const p=byName(name);logProject=name;$('logsTitle').textContent=t('logs.titleFor',{project:name});
@@ -663,26 +704,196 @@ document.querySelectorAll('.closeInspect').forEach(b=>b.onclick=()=>$('inspectDi
 document.querySelectorAll('[data-lang]').forEach(b=>b.onclick=()=>setLanguage(b.dataset.lang));
 $('search').addEventListener('input',renderProjects);$('refresh').onclick=()=>{refresh();loadHost();};$('scan').onclick=scanDocker;$('add').onclick=()=>openProject();
 $('refreshStats').onclick=refreshResources;$('analyzeDisk').onclick=analyzeDisk;$('stopSelected').onclick=()=>act('stop',[...selectedStops],{title:t('resources.stopPlan'),review:true});
-document.querySelectorAll('.chip[data-filter]').forEach(b=>b.onclick=()=>{filter=b.dataset.filter;document.querySelectorAll('.chip[data-filter]').forEach(x=>x.classList.toggle('selected',x===b));renderProjects();});
-// Sections collapse from their heading; the summary line stays visible and the choice is remembered.
+function setProjectFilter(f){filter=f;document.querySelectorAll('.chip[data-filter]').forEach(x=>x.classList.toggle('selected',x.dataset.filter===f));renderProjects();}
+document.querySelectorAll('.chip[data-filter]').forEach(b=>b.onclick=()=>setProjectFilter(b.dataset.filter));
+// Blocks collapse from their heading (overview cards); the choice is remembered.
 const collapsed=new Set(storedList('ddm.collapsed'));
 function setCollapsed(section,on){
  section.classList.toggle('collapsed',on);section.querySelector('.collapser').setAttribute('aria-expanded',String(!on));
- if(on)collapsed.add(section.id);else{collapsed.delete(section.id);requestAnimationFrame(updateFades);}
+ if(on)collapsed.add(section.id);else collapsed.delete(section.id);
  storeList('ddm.collapsed',collapsed);
 }
-document.querySelectorAll('section.block').forEach(sec=>{const b=sec.querySelector('.collapser');if(collapsed.has(sec.id)){sec.classList.add('collapsed');b.setAttribute('aria-expanded','false');}b.addEventListener('click',()=>setCollapsed(sec,!sec.classList.contains('collapsed')));});
-// Jumping to a section opens it first when it is collapsed.
-const go=(nav,target)=>{
- if(target){const el=$(target),sec=el.closest('section.block');if(sec?.classList.contains('collapsed'))setCollapsed(sec,false);el.scrollIntoView({behavior:'smooth'});}
- else window.scrollTo({top:0,behavior:'smooth'});
- document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active',x.id===nav));
-};
-$('navProjects').onclick=()=>go('navProjects','projects');$('navAdvisor').onclick=()=>go('navAdvisor','advisor');$('navResources').onclick=()=>go('navResources','resources');$('navDisk').onclick=()=>go('navDisk','disk');$('navPorts').onclick=()=>{go('navPorts','ports');loadPorts($('portInput').value.trim());};
-// A tile's body opens its section; the button inside it runs that tile's own measurement.
+document.querySelectorAll('section.block').forEach(sec=>{const b=sec.querySelector('.collapser');if(!b)return;if(collapsed.has(sec.id)){sec.classList.add('collapsed');b.setAttribute('aria-expanded','false');}b.addEventListener('click',()=>setCollapsed(sec,!sec.classList.contains('collapsed')));});
+
+// ---- Pages: one at a time, addressed by #name so a reload stays where you were ----
+const PAGES={overview:'nav.overview',projects:'nav.projects',containers:'nav.containers',health:'nav.health',resources:'nav.resources',ports:'nav.ports',cleanup:'nav.cleanup'};
+let page='overview';
+function renderChrome(){
+ $('crumbPage').textContent=t(PAGES[page]);document.title=`${t(PAGES[page])} · ${t('app.title')}`;
+ renderThemeButton();setSidebar($('shell').classList.contains('navcollapsed'),false);
+}
+function showPage(name){
+ page=Object.hasOwn(PAGES,name)?name:'overview';
+ document.querySelectorAll('.page').forEach(sec=>{sec.hidden=sec.dataset.page!==page;});
+ document.querySelectorAll('.nav[data-page]').forEach(a=>{const on=a.dataset.page===page;a.classList.toggle('active',on);if(on)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
+ renderChrome();window.scrollTo(0,0);
+ if(page==='ports'&&token)loadPorts($('portInput').value.trim());
+ if(page==='health')requestAnimationFrame(updateFades);
+}
+const go=name=>{if(location.hash.slice(1)===name)showPage(name);else location.hash=name;};
+window.addEventListener('hashchange',()=>showPage(location.hash.slice(1)));
+// A tile's body opens its page; the button inside it runs that tile's own measurement.
 const tileGo=(id,fn)=>$(id).addEventListener('click',e=>{if(!e.target.closest('button'))fn();});
-tileGo('tileHealth',()=>go('navAdvisor','advisor'));tileGo('tileProjects',()=>go('navProjects','projects'));
-tileGo('memoryMetric',()=>go('navResources','resources'));tileGo('hostMetric',()=>go('navResources','resources'));tileGo('tileDisk',()=>go('navDisk','disk'));
+// The logo goes home; a plain click on it stays in this tab even when the Overview is already open.
+$('brandHome').addEventListener('click',e=>{if(e.metaKey||e.ctrlKey||e.shiftKey||e.button)return;e.preventDefault();go('overview');});
+tileGo('tileHealth',()=>go('health'));tileGo('tileProjects',()=>go('projects'));
+tileGo('memoryMetric',()=>go('resources'));tileGo('hostMetric',()=>go('resources'));tileGo('tileDisk',()=>go('cleanup'));
+
+// ---- Theme: light (Calm Workspace) or dark (graphite). Unset follows macOS; the choice is saved with the language ----
+const prefersDark=matchMedia('(prefers-color-scheme: dark)');
+const currentTheme=()=>document.documentElement.dataset.theme||(prefersDark.matches?'dark':'light');
+function renderThemeButton(){
+ const dark=currentTheme()==='dark',b=$('themeToggle'),label=t(dark?'theme.toLight':'theme.toDark');
+ b.replaceChildren(icon(dark?'sun':'moon'));b.title=label;b.setAttribute('aria-label',label);
+ document.querySelector('meta[name=theme-color]').content=dark?'#151C1A':'#F7F8F6';
+}
+async function setTheme(theme){
+ document.documentElement.dataset.theme=theme;renderThemeButton();
+ if(token){try{workspace=await api('/api/workspace','PUT',{...workspace,language:I.lang,theme});}catch(e){toast(e.message);}}
+}
+$('themeToggle').onclick=()=>setTheme(currentTheme()==='dark'?'light':'dark');
+prefersDark.addEventListener('change',renderThemeButton);
+// The sidebar folds to icons (their names stay as tooltips); a per-browser choice.
+function setSidebar(folded,save=true){
+ $('shell').classList.toggle('navcollapsed',folded);
+ const b=$('collapseSidebar'),label=t(folded?'nav.expand':'nav.collapse');b.replaceChildren(icon(folded?'panel-left-open':'panel-left-close'));b.title=label;b.setAttribute('aria-label',label);
+ if(save)try{localStorage.setItem('ddm.sidebar',folded?'1':'');}catch{}
+}
+$('collapseSidebar').onclick=()=>setSidebar(!$('shell').classList.contains('navcollapsed'));
+
+// ---- Overview: what needs attention now, and the projects at a glance (from the cheap project list) ----
+function renderOverviewLists(){
+ if(!loaded)return;
+ renderContainerChart();
+ const items=projects.flatMap(p=>p.issues.filter(i=>i.level==='error'||i.level==='warn').map(i=>({p,i})))
+  .sort((a,b)=>(a.i.level==='error'?0:1)-(b.i.level==='error'?0:1)||a.p.name.localeCompare(b.p.name));
+ $('attentionCount').textContent=items.length||'';
+ const list=$('attentionList');
+ if(!items.length){const li=el('li','allclear'),txt=el('div');txt.append(el('strong','',t('overview.allClear')),el('span','smalltext',t('overview.allClearHint')));li.append(icon('circle-check'),txt);list.replaceChildren(li);}
+ else list.replaceChildren(...items.slice(0,6).map(({p,i})=>{
+  const li=el('li','attn '+i.level),sev=el('span','sev'),body=el('div'),meta=el('div','attnmeta'),acts=el('div','attnactions');
+  sev.append(icon(i.level==='error'?'circle-x':'triangle-alert'),t(i.level==='error'?'overview.sevError':'overview.sevWarn'));
+  const proj=el('button','btn link',p.name);proj.type='button';proj.title=t('card.openDetails',{project:p.name});proj.onclick=()=>inspectProject(p);
+  meta.append(proj,' · '+tr(i.hint));body.append(el('div','attntext',tr(i.text)),meta);
+  if(i.service&&p.containers.some(c=>c.service===i.service))acts.append(button(t('action.log'),'mini',()=>openLogs(p.name,i.service),false,'','scroll-text'));
+  li.append(sev,body,acts);return li;
+ }),...(items.length>6?[(()=>{const li=el('li','attnmore');li.append(button(t('overview.moreIssues',{count:items.length}),'link',()=>{setProjectFilter('issues');go('projects');}));return li;})()]:[]));
+ const recent=$('recentProjects'),sorted=[...projects].sort((a,b)=>Number(b.running>0)-Number(a.running>0)||Number(hasProblem(b))-Number(hasProblem(a))||a.name.localeCompare(b.name));
+ if(!sorted.length){recent.replaceChildren(el('li','emptysmall',t('overview.noProjects')));return;}
+ recent.replaceChildren(...sorted.slice(0,6).map(p=>{
+  const li=el('li','prow st-'+p.status),open=el('button','projlink'),info=el('div'),usage=usageOf(p.name);open.type='button';open.title=t('card.openDetails',{project:p.name});
+  open.append(el('span','projname',p.name));open.onclick=()=>inspectProject(p);
+  info.append(open,el('div','pmeta',[t('card.runningOf',{running:p.running,total:p.total}),usage?.memBytes>0?t('metric.ram',{size:fmtBytes(usage.memBytes)}):''].filter(Boolean).join(' · ')));
+  li.append(el('span','pdot'),info,el('span','pill '+p.status,t(STATUS_KEYS[p.status]||'status.unknown')),iconButton('chevron-right',t('card.openDetails',{project:p.name}),()=>inspectProject(p),false));
+  return li;
+ }));
+}
+
+// ---- Overview charts: containers per project (cheap list) and RAM per project (last measurement) ----
+// One tooltip serves every bar: it follows the pointer, or sits under the row a keyboard user focused. Esc hides it.
+const tip=el('div','charttip');tip.hidden=true;tip.setAttribute('role','tooltip');document.body.append(tip);
+const hideTip=()=>{tip.hidden=true;};
+function placeTip(x,y){const w=tip.offsetWidth,h=tip.offsetHeight;tip.style.left=Math.max(8,Math.min(x+14,innerWidth-w-8))+'px';tip.style.top=(y+16+h>innerHeight-8?y-h-12:y+16)+'px';}
+function tipRow(cls,label,value){const r=el('div','tiprow');if(cls)r.append(el('i','sw '+cls));r.append(el('span','',label),el('b','',value));return r;}
+function attachTip(row,focus,build){
+ const fill=()=>{const [title,rows]=build();tip.replaceChildren(el('strong','',title),...rows);tip.hidden=false;};
+ row.addEventListener('mouseenter',fill);row.addEventListener('mousemove',e=>placeTip(e.clientX,e.clientY));row.addEventListener('mouseleave',hideTip);
+ if(focus){focus.addEventListener('focus',()=>{fill();const r=row.getBoundingClientRect();placeTip(r.left+r.width/3,r.bottom);});focus.addEventListener('blur',hideTip);}
+}
+addEventListener('scroll',hideTip,{passive:true});addEventListener('keydown',e=>{if(e.key==='Escape')hideTip();});
+// The project list is polled every 15 s: a chart is rebuilt only when what it shows changed, so hover and focus survive.
+const chartSigs={};
+function chartChanged(key,data){const sig=JSON.stringify([I.lang,data]);if(chartSigs[key]===sig)return false;chartSigs[key]=sig;hideTip();return true;}
+function chartEmpty(ic,text){const li=el('li','chartempty');li.append(icon(ic),el('span','',text));return li;}
+function chartName(name,p){
+ if(!p)return el('span','hname',name);
+ const b=el('button','hname',name);b.type='button';b.title=t('card.openDetails',{project:name});b.onclick=()=>inspectProject(p);return b;
+}
+const CHART_ROWS=8;
+// Each container counts once, in the order the bar is drawn; `created` reads as stopped.
+const CHART_STATE={running:'ok',starting:'ok',unhealthy:'warn',paused:'warn',failed:'bad',restarting:'bad',stopped:'off',created:'off'};
+const CHART_SERIES=[['ok','overview.legendRunning'],['warn','overview.legendWarn'],['bad','overview.legendBad'],['off','overview.legendStopped']];
+function renderContainerChart(){
+ const rows=projects.map(p=>{
+  const n={ok:0,warn:0,bad:0,off:0},core=p.containers.filter(c=>!c.oneoff);for(const c of core)n[CHART_STATE[containerState(c)]||'off']++;
+  return {name:p.name,n,total:core.length,up:core.filter(c=>c.state==='running').length};
+ }).filter(r=>r.total).sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name));
+ const count=rows.reduce((s,r)=>s+r.total,0),up=rows.reduce((s,r)=>s+r.up,0),shown=rows.slice(0,CHART_ROWS);
+ if(!chartChanged('containers',[shown,count,up]))return;
+ $('containerChartSum').textContent=count?t('overview.chartSum',{running:up,count}):'';
+ $('containerChartMore').textContent=rows.length>CHART_ROWS?t('common.more',{count:rows.length-CHART_ROWS}):'';
+ const list=$('containerChart');
+ if(!rows.length)return list.replaceChildren(chartEmpty('box',t('containers.empty')));
+ const max=rows[0].total;
+ list.replaceChildren(...shown.map(r=>{
+  const p=byName(r.name),row=el('li','hrow'),name=chartName(r.name,p),track=el('div'),bar=el('div','hbar');
+  bar.style.width=r.total/max*100+'%';bar.setAttribute('role','img');
+  bar.setAttribute('aria-label',t('overview.barContainers',{project:r.name,up:r.up,total:r.total,ok:r.n.ok,warn:r.n.warn,bad:r.n.bad,stopped:r.n.off}));
+  for(const [k] of CHART_SERIES)if(r.n[k]){const seg=el('span','s-'+k);seg.style.flex=`${r.n[k]} 1 0`;bar.append(seg);}
+  track.append(bar);row.append(name,track,el('span','hval',`${r.up}/${r.total}`));
+  attachTip(row,p?name:null,()=>[r.name,CHART_SERIES.filter(([k])=>r.n[k]).map(([k,key])=>tipRow('s-'+k,t(key),String(r.n[k])))]);
+  return row;
+ }));
+}
+// Standalone containers have no project; their memory is one muted row so the bars add up to the tile above.
+function renderMemoryChart(){
+ const list=$('memoryChart');
+ if(!resources){
+  if(!chartChanged('memory',working.has('stats')))return;
+  $('memoryChartSum').textContent='';$('memoryChartMore').textContent='';
+  return list.replaceChildren(chartEmpty('gauge',t(working.has('stats')?'metric.measuring':'overview.memNotMeasured')));
+ }
+ const vmTotal=(hostData?.vm||resources.vm||{}).memTotal||0,loose=resources.containers.filter(c=>!c.project);
+ const rows=resources.projects.filter(r=>r.memBytes>0).map(r=>({name:r.name,mem:r.memBytes,cpu:r.cpuPercent,project:true}));
+ const looseMem=loose.reduce((s,c)=>s+c.memBytes,0);
+ if(looseMem>0)rows.push({name:t('overview.standalone'),mem:looseMem,cpu:Math.round(loose.reduce((s,c)=>s+c.cpuPercent,0)*100)/100,project:false});
+ rows.sort((a,b)=>b.mem-a.mem);
+ const shown=rows.slice(0,CHART_ROWS);
+ if(!chartChanged('memory',[shown,vmTotal,resources.measuredAt,resources.totals.memBytes]))return;
+ $('memoryChartSum').textContent=[fmtBytes(resources.totals.memBytes),t('resources.measuredAt',{time:clock(resources.measuredAt)})].join(' · ');
+ $('memoryChartMore').textContent=rows.length>CHART_ROWS?t('common.more',{count:rows.length-CHART_ROWS}):'';
+ if(!rows.length)return list.replaceChildren(chartEmpty('gauge',t('resources.noRunning')));
+ const max=rows[0].mem,share=m=>vmTotal?(m/vmTotal<.01?'<1%':Math.round(m/vmTotal*100)+'%'):'';
+ list.replaceChildren(...shown.map(r=>{
+  const p=r.project?byName(r.name):null,row=el('li','hrow'),name=chartName(r.name,p),track=el('div'),bar=el('div','hbar'),val=el('span','hval',fmtBytes(r.mem));
+  bar.style.width=r.mem/max*100+'%';bar.setAttribute('role','img');bar.setAttribute('aria-label',t('overview.barMemory',{project:r.name,size:fmtBytes(r.mem),pct:share(r.mem)||'—',cpu:r.cpu.toFixed(1)}));
+  bar.append(el('span','s-mem'));bar.firstChild.style.flex='1';
+  if(vmTotal)val.append(el('small','',share(r.mem)));
+  track.append(bar);row.append(name,track,val);
+  attachTip(row,p?name:null,()=>[r.name,[tipRow('s-mem',t('overview.tipRam'),fmtBytes(r.mem)),...(vmTotal?[tipRow('',t('overview.tipVm'),share(r.mem))]:[]),tipRow('',t('overview.tipCpu'),r.cpu.toFixed(1)+'%')]]);
+  return row;
+ }));
+}
+
+// ---- Containers: every container of every project in one table, with the same controls as the cards ----
+let cfilter='all';
+const PROBLEM_STATES=new Set(['failed','restarting','unhealthy']);
+function renderContainers(){
+ if(!loaded)return;
+ const q=$('containerSearch').value.trim().toLowerCase(),all=projects.flatMap(p=>p.containers.filter(c=>!c.oneoff).map(c=>({p,c,s:containerState(c)})));
+ const isRunning=x=>x.c.state==='running',isProblem=x=>PROBLEM_STATES.has(x.s),isStopped=x=>!isRunning(x)&&!isProblem(x),count=f=>all.filter(f).length;
+ $('cAll').textContent=all.length;$('cRunning').textContent=count(isRunning);$('cStopped').textContent=count(isStopped);$('cProblems').textContent=count(isProblem);
+ $('containersSummary').textContent=t('containers.summary',{count:all.length,running:count(isRunning)});
+ const shown=all.filter(x=>cfilter==='all'||(cfilter==='running'&&isRunning(x))||(cfilter==='stopped'&&isStopped(x))||(cfilter==='problems'&&isProblem(x)))
+  .filter(x=>!q||[x.c.service,x.c.name,x.p.name,x.c.image,...x.c.ports.map(b=>String(b.port))].join(' ').toLowerCase().includes(q))
+  .sort((a,b)=>Number(isProblem(b))-Number(isProblem(a))||Number(isRunning(b))-Number(isRunning(a))||a.p.name.localeCompare(b.p.name)||(a.c.service||a.c.name).localeCompare(b.c.service||b.c.name));
+ const tbody=$('containerRows');
+ if(!shown.length)return messageRow(tbody,t(all.length?'containers.none':'containers.empty'),7);
+ tbody.replaceChildren(...shown.map(({p,c})=>{
+  const row=el('tr',stateDot(c)),name=el('td','cname'),proj=el('td'),st=el('td'),ports=el('td'),act=el('td');
+  name.append(el('strong','',c.service||c.name));if(c.service&&c.name!==c.service)name.append(el('span','',c.name));name.title=c.image;
+  const pb=el('button','linkish',p.name);pb.type='button';pb.title=t('card.openDetails',{project:p.name});pb.onclick=()=>inspectProject(p);proj.append(pb);
+  st.append(stateBadge(c));
+  const usage=resources?.containers.find(x=>String(x.id).slice(0,12)===c.id),list=uniquePorts(c);
+  const wrap=el('div','ports');list.forEach(port=>wrap.append(portLink(port)));ports.append(list.length?wrap:document.createTextNode('—'));
+  act.append(containerButtons(p,c));
+  row.append(name,proj,st,el('td','',c.state==='running'&&usage?`${usage.cpuPercent.toFixed(1)}% · ${fmtBytes(usage.memBytes)}`:'—'),ports,
+   el('td','smalltext',c.state==='running'?fmtSince(c.startedAt):c.finishedAt?t('cstate.ago',{time:fmtSince(c.finishedAt)}):'—'),act);
+  return row;
+ }));
+}
+document.querySelectorAll('.chip[data-cfilter]').forEach(b=>b.onclick=()=>{cfilter=b.dataset.cfilter;document.querySelectorAll('.chip[data-cfilter]').forEach(x=>x.classList.toggle('selected',x===b));renderContainers();});
+$('containerSearch').addEventListener('input',renderContainers);
 // Only cheap views are polled, and only while the page is visible: the project list (`docker ps` +
 // `inspect`, ~0.3 s) and this Mac's memory. Stats, disk and the advisor wait for a click.
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-lastRefresh>5000){refresh();loadHost();}});
@@ -690,6 +901,8 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now(
  try{const [vi,en]=await Promise.all(['vi','en'].map(l=>fetch(`/locales/${l}.json`).then(r=>r.json())));DICTS={vi,en};}catch{}
  // The server writes the saved language into the page; this browser's own copy is only a fallback.
  // Read before setLanguage() writes it, so merely opening the page never creates a config file.
+ let folded=false;try{folded=localStorage.getItem('ddm.sidebar')==='1';}catch{}
+ setSidebar(folded,false);showPage(location.hash.slice(1));renderSteps();
  const saved=document.documentElement.dataset.savedLang||'',local=storedLanguage();
  await setLanguage(saved||local,false);
  try{

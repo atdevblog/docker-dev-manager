@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="460" height="204" viewBox="0 0 460 204" role="img">
+<title>billing — zsh</title>
+<rect x="0.5" y="0.5" width="459" height="203" rx="10" fill="#1A211E" stroke="#34423B"/>
+<path d="M0.5 30V10.5a10 10 0 0 1 10-10h439a10 10 0 0 1 10 10V30z" fill="#232C28"/>
+<line x1="0.5" y1="30" x2="459.5" y2="30" stroke="#34423B"/>
+<circle cx="18" cy="15.5" r="5" fill="#FF5F57"/><circle cx="34" cy="15.5" r="5" fill="#FEBC2E"/><circle cx="50" cy="15.5" r="5" fill="#28C840"/>
+<text x="230.0" y="19.5" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="11.5" fill="#8C9C94">billing — zsh</text>
+<g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,DejaVu Sans Mono,monospace" font-size="12.5">
+<text x="16" y="50"><tspan fill="#8CC3AF">$ </tspan><tspan fill="#E6EEE9">docker stats --no-stream</tspan></text>
+<text x="16" y="68"><tspan fill="#AAB8B0">NAME                 CPU %   MEM USAGE / LIMIT</tspan></text>
+<text x="16" y="86"><tspan fill="#D8E2DC">billing-worker-1     0.3%    </tspan><tspan fill="#F2C46D">1.9GiB / 7.7GiB</tspan></text>
+<text x="16" y="104"><tspan fill="#D8E2DC">storefront-web-1     0.1%    673MiB / 7.7GiB</tspan></text>
+<text x="16" y="122"><tspan fill="#D8E2DC">analytics-ingest-1   0.0%    512MiB / 7.7GiB</tspan></text>
+<text x="16" y="140"><tspan fill="#8C9C94">… and 14 more containers</tspan></text>
+<text x="16" y="158"><tspan fill="#8CC3AF">$ </tspan><tspan fill="#E6EEE9">sysctl vm.swapusage</tspan></text>
+<text x="16" y="176"><tspan fill="#D8E2DC">vm.swapusage: total = 22528M  used = </tspan><tspan fill="#FF8A95">21850M</tspan></text>
+</g></svg>

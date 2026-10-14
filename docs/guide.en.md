@@ -38,45 +38,45 @@ There is nothing to install: the project has no npm dependencies. Open **http://
 
 ![Overview](images/en-overview.png)
 
-- **Sidebar**: jump to Projects, Resources, Ports or Disk. The dot at the bottom shows whether Docker Engine is reachable.
-- **Header**: switch language (*Tiếng Việt / English*), **Refresh**, and **Add manually** for a project that has no containers yet.
-- **Collapse what you do not need**: click a section title (Advisor, Projects, Free up memory, Ports, Disk) to fold it. Its summary line stays visible, the choice is remembered, and jumping to it from the sidebar or a card opens it again.
-- **Overview cards** (click one to jump to the matching section):
-  - *Docker health*: the advisor's score out of 100 with its status (Healthy, Needs attention, Unhealthy), the number of problems and when it was checked. It says *Not checked* until you click **Check** on the card (about half a second). It turns red when Docker Engine is unreachable.
-  - *Running projects*: running out of total, with the number of containers and of projects that need attention.
-  - *Container RAM*: memory used by containers against the Docker Desktop VM size (with a meter), CPU in cores, and the largest project. It needs `docker stats` (about 2 seconds of Docker work), so it says *Not measured* until you click **Measure** on the card.
-  - *Mac memory*: memory used (counted like Activity Monitor) against the total, with a meter whose colour follows macOS memory pressure, plus swap and CPU. Heavy swap is highlighted when memory is short.
-  - *Reclaimable disk*: what can be cleaned safely, plus what needs review first. Click **Analyze** on the card (`docker system df -v`, a few seconds).
-- **Filters**: All, Running, *Needs attention* (projects with problems), Managed, Discovered, plus a search box.
-- **Health & resource advisor**: a health score, where resources are wasted and what to do now (see [section 3](#3-health--resource-advisor)).
-- **Groups from Docker**: projects that belong together, detected automatically, with ▶ start and ■ stop (see [section 6](#7-groups-from-docker)).
-- **Project cards**, one per Compose project found from Docker:
-  - Click the project's **name** to open its details.
-  - Status: *Running*, *Partly running*, *Stopped*.
-  - *Discovered* means found automatically; *Managed* means you imported or added it (needed only for Up/Down).
-  - `N sources` means the same project name was started from several folders or file sets.
-  - ★ *keep running* marks shared infrastructure you never want to stop by accident.
-  - Red or amber lines explain problems, each with a **Log** link.
-
-Scroll down for the project cards:
+- **Sidebar**, in three groups with one page each: *Explore* (**Overview**, **Projects**, **Containers**), *Understand* (**Health**, **Resources**, **Ports**) and *Maintain* (**Cleanup**). The dot at the bottom shows whether Docker Engine is reachable, and the button next to it folds the sidebar to icons. Every page has its own address (`#projects`, `#containers`…), so a reload stays where you were.
+- **Top bar**: where you are, the language (*Tiếng Việt / English*), the light/dark theme switch, **Refresh**, and **Add manually** for a project that has no containers yet. The theme follows macOS until you pick one; the choice is saved with the language.
+- **Overview** says what is happening now:
+  - Five cards (click one to open its page):
+    - *Docker health*: the score out of 100 with its status (Healthy, Needs attention, Unhealthy), the number of problems and when it was checked. It says *Not checked* until you click **Check** on the card (about half a second). It turns red when Docker Engine is unreachable.
+    - *Running projects*: running out of total, with the number of containers and of projects that need attention.
+    - *Container RAM*: memory used by containers against the Docker Desktop VM size (with a meter), CPU in cores, and the largest project. It needs `docker stats` (about 2 seconds of Docker work), so it says *Not measured* until you click **Measure** on the card.
+    - *Mac memory*: memory used (counted like Activity Monitor) against the total, with a meter whose colour follows macOS memory pressure, plus swap and CPU. Heavy swap is highlighted when memory is short.
+    - *Reclaimable disk*: what can be cleaned safely, plus what needs review first. Click **Analyze** on the card (`docker system df -v`, a few seconds).
+  - **Containers by project**: one bar per project, as long as its number of containers and split by state (running, unhealthy or paused, failed or restarting, stopped), with *running / total* at the end. Hover a bar for the counts, click a name for its details, **View table** opens the Containers page.
+  - **RAM by project**: projects sorted by memory, with their share of the Docker VM, from the last *Container RAM* measurement. Containers without a project are grouped as *Standalone containers*.
+  - **Needs attention**: the problems your projects report, errors first, each with its project and a **Log** button.
+  - **Projects**: the first projects with their status and RAM; click a name for its details, **View all** for the rest. Every block folds from its title, and the choice is remembered.
+- **Projects**: filters (All, Running, *Needs attention*, Managed, Discovered), a search box, the [groups from Docker](#7-groups-from-docker) with ▶ start and ■ stop, and one card per Compose project:
+  - Click the project's **name** to open its details, in a panel from the right. Hovering the name shows whether it was *Discovered* (found automatically) or *Managed* (imported or added by you, needed only for Up/Down), and its folder.
+  - Status: *Running*, *Partly running* or *Stopped*.
+  - One line under the name tells the most useful thing: the most serious problem (with **Log** and **+N more**), otherwise the description, otherwise the folder. Tags follow it: *Managed*, `N sources` (the same project name was started from several folders or file sets) and ★ *Keep running* (shared infrastructure you never want to stop by accident).
+  - The **container bar** shows *running / total*, RAM once measured, and each container's state in colour; hover it for the counts.
+  - The buttons: the next step in words (**▶ Start**, or **■ Stop** when everything runs), then quiet icons with a tooltip for Stop, Restart, Logs, Terminal and Details, shown only when they can do something.
 
 ![Project cards](images/en-projects.png)
 
-On each card, **▸ N containers** opens one row per container with its own buttons (see [One container at a time](#one-container-at-a-time)).
+Click a card's **container bar** to open one row per container with its own buttons (see [One container at a time](#one-container-at-a-time)).
 
-The project list and *Mac memory* refresh every 15 seconds while the page is visible: they are cheap. Measurements run only when you click the button on their card, one at a time, so the dashboard stays light. Once measured, the button reads **↻ Check again**, **↻ Measure again** or **↻ Analyze again**, and the card shows when it was measured. Measurements are remembered: after a reload (or a restart) they come back with their time. Only the health check runs again by itself, since it takes half a second; RAM/CPU and disk wait for your click.
+- **Containers**: every container of every project in one table, with its state, CPU · RAM (once measured), ports, uptime and the same buttons as on the cards. Filter by Running, Stopped or Problems, or search by name, project, image or port. Problems come first.
+
+The project list and *Mac memory* refresh every 15 seconds while the page is visible: they are cheap. Measurements run only when you click their button, on a card of the Overview or in the header of their page, one at a time, so the dashboard stays light. Once measured, the button reads **↻ Check again**, **↻ Measure again** or **↻ Analyze again**, and the card shows when it was measured. Measurements are remembered: after a reload (or a restart) they come back with their time. Only the health check runs again by itself, since it takes half a second; RAM/CPU and disk wait for your click.
 
 ## 3. Health & resource advisor
 
 ![Health & resource advisor](images/en-advisor.png)
 
-The advisor sits right under the overview cards and answers three questions from what you measured on the cards above; it has no buttons of its own:
+The **Health** page answers three questions from what you measured. Its header carries the same three buttons as the Overview cards:
 
 - **Check** on *Docker health* fills *What is wrong?*
 - **Measure** on *Container RAM* (`docker stats`) and **Analyze** on *Reclaimable disk* (`docker system df -v`) fill *Where is waste?*. The same results also fill [Free up memory](#8-free-up-memory) and [Disk](#10-clean-disk-space-safely).
 - *What to do now?* combines whatever has been measured, and says what is not covered yet.
 
-After you start or stop something, the summary says the figures are older; click ↻ on the card to update it.
+After you start or stop something, the summary says the figures are older; click ↻ to update them.
 
 **What is wrong?** The health score starts at 100. Each problem deducts a fixed number of points, never an opaque number, and every line shows the cause, the fix and a button (open the log, review and start, details…). Hover a line for Docker's own explanation. 90–100 is *Healthy*, 70–89 *Needs attention*, below 70 *Unhealthy*. *How the score works* lists every rule:
 
@@ -108,14 +108,14 @@ To change the idle threshold: `DEV_MANAGER_IDLE_MINUTES=30 npm start`.
 
 ## 4. Start, stop, restart
 
-Use the buttons on each card:
+Use the buttons on each card: the next step in words, the others as icons (hover one for its name).
 
 | Button | What it does | Your data |
 |---|---|---|
 | **▶ Start** | Starts the project's existing containers (`docker compose start`). Never recreates them. | Untouched |
 | **■ Stop** | Stops the containers (`docker compose stop`). | Containers and volumes kept |
 | **↻ Restart** | Restarts the containers. | Untouched |
-| **›_ Terminal** | Opens Terminal in the project's folder (where its Compose file is). | Untouched |
+| **Terminal** | Opens Terminal in the project's folder (where its Compose file is). | Untouched |
 
 Before every action the dashboard checks for problems. If everything is fine, it runs at once. If not, a review window opens:
 
@@ -128,20 +128,20 @@ Before every action the dashboard checks for problems. If everything is fine, it
 
 ### One container at a time
 
-Like Docker Desktop, every container can be controlled on its own. On a card, click **▸ N containers** (or open **Details**). Each container gets a row with its state, RAM and CPU (once measured), its host ports (click one to open it in the browser) and its buttons: **▶ Start** or **■ Stop**, **↻ Restart**, **≡ Logs**, and two Terminal buttons:
+Like Docker Desktop, every container can be controlled on its own. On a card, click the **container bar** (or open **Details**). Each container gets a row with its name, then its state, RAM and CPU (once measured) and its host ports (click one to open it in the browser), and its buttons: **▶ Start** or **■ Stop**, **↻ Restart**, **Logs**, and two Terminal buttons:
 
-- **›_** opens Terminal with a shell inside the container (`docker exec`, bash when available), already in its working directory, for example `/var/www/api`. Only for a running container.
-- **⌂** opens Terminal on your Mac at the container's source folder: the folder mounted on its working directory, for example `~/Projects/api`. Greyed out when the code lives inside the image or a volume.
+- The **terminal** icon opens Terminal with a shell inside the container (`docker exec`, bash when available), already in its working directory, for example `/var/www/api`. Only for a running container.
+- The **folder** icon opens Terminal on your Mac at the container's source folder: the folder mounted on its working directory, for example `~/Projects/api`. Greyed out when the code lives inside the image or a volume.
 
 
-- Each state has its own colour, icon and words, on the row and on the chip: **● Running** (green), **‖ Paused** (amber), **■ Stopped** (grey), **✕ Failed** with its exit code or *Out of memory* (red), **↻ Restarting** (red, a crash loop), **◐ Starting** and **○ Created** (blue). A stop with the usual codes (0, 137, 143) counts as stopped, not failed. Each card also carries a stripe in its project's status colour.
+- Each state has its own colour, icon and words on the row, and the same colour in the card's container bar: **● Running** (green), **‖ Paused** (amber), **■ Stopped** (grey), **✕ Failed** with its exit code or *Out of memory* (red), **↻ Restarting** (red, a crash loop), **◐ Starting** and **○ Created** (blue). A stop with the usual codes (0, 137, 143) counts as stopped, not failed.
 - They run `docker start`, `docker stop` or `docker restart` on that one container. Its neighbours keep running, and a restart never starts the services it depends on.
 - The same checks apply. Stopping a container that others need (`depends_on`), that sits on a network another running project uses, or that belongs to a *keep running* project opens a review first, for example *"app, worker depend on mariadb: they keep running but may fail until mariadb is back."*
 - Starting one is blocked when its port is taken or its network no longer exists, and warns when a service it depends on is stopped.
 
 ## 5. Why is a project not running?
 
-The card already lists the most important problems. Click **Details** for the full picture:
+The card shows the most serious problem under the project's name. Click the name for the full picture:
 
 ![Project details](images/en-details.png)
 
@@ -159,7 +159,7 @@ Containers with restart policy `unless-stopped` or `always` that are stopped wer
 
 ## 6. Read logs
 
-Click **Logs** on a card, or **Log** next to a problem to open that service directly.
+Click the **Logs** icon on a card, or **Log** next to a problem to open that service directly.
 
 ![Logs](images/en-logs.png)
 
@@ -215,7 +215,7 @@ Ports from 49152 up are assigned at random by macOS and are never suggested.
 
 ## 10. Clean disk space safely
 
-Open **Disk** and click **Analyze disk** (it takes a few seconds). **Analyze** on the *Reclaimable disk* card does the same.
+Open **Cleanup** and click **Analyze disk** (it takes a few seconds); **Analyze** on the *Reclaimable disk* card does the same. Three steps show the path: analyze, review each risk, then copy a command and run it yourself.
 
 ![Disk usage](images/en-disk.png)
 
