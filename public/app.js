@@ -13,7 +13,13 @@ const ERROR_LINE=/\b(error|err|fatal|exception|panic|critical|crit|fail(ed|ure)?
 let DICTS={vi:{},en:{}};
 const missingKeys=new Set();
 let I=I18N.create(DICTS,I18N.FALLBACK);
-const t=(key,params)=>I.t(key,params),tr=message=>I.render(message);
+// The server writes its platform into the page. Texts that name the Mac, Finder or Activity Monitor
+// have their own wording on other systems; on a Mac the original keys stay.
+const PLATFORM=document.documentElement.dataset.platform||'darwin',ON_MAC=PLATFORM==='darwin';
+const PC_KEYS={'metric.thisMac':'metric.thisComputer','metric.hostTitle':'metric.hostTitlePc','form.intro':'form.introPc','form.pickTitle':'form.pickTitlePc',
+ 'ports.desc':'ports.descPc','ports.groupProcess':'ports.groupProcessPc','container.folderNone':'container.folderNonePc','advisor.healthEmpty':'advisor.healthEmptyPc',
+ 'sys.title':'sys.titlePc','sys.netTitle':'sys.netTitlePc'};
+const t=(key,params)=>I.t(!ON_MAC&&PC_KEYS[key]||key,params),tr=message=>I.render(message);
 const STATUS_KEYS={running:'status.running',partial:'status.partial',stopped:'status.stopped',error:'status.error',unknown:'status.unknown'};
 const ACTION_KEYS={start:'action.start',stop:'action.stop',restart:'action.restart',up:'action.up',down:'action.down'};
 const VERB_KEYS={start:'verb.start',stop:'verb.stop',restart:'verb.restart',up:'verb.up',down:'verb.down'};
@@ -41,7 +47,7 @@ function applyStatic(){
 // Re-renders from data already in memory: switching language never refetches or touches Docker.
 function rerender(){
  if(!loaded)return;
- renderEngine();updateCounters();renderGroups();renderProjects();renderOverviewLists();renderContainers();renderSuggestions();renderStats();
+ renderEngine();updateCounters();renderGroups();renderProjects();renderOverviewLists();renderContainers();renderSuggestions();renderStats();renderSystem();renderNetCheck();
  if(lastPorts)renderPortsData();if(lastDisk)renderDisk(lastDisk);renderAdvisorAll();renderSteps();
 }
 // The choice lives in the config file (survives restarts, upgrades and other URLs such as a local
@@ -186,7 +192,8 @@ function projectCard(p){
  return card;
 }
 // Home folders read as ~ (macOS /Users/name, Linux /home/name).
-const shortPath=dir=>dir.replace(/^\/(Users|home)\/[^/]+(?=\/|$)/,'~');
+// Home folders read as ~ (macOS /Users/name, Linux /home/name, Windows C:\Users\name).
+const shortPath=dir=>dir.replace(/^\/(Users|home)\/[^/]+(?=\/|$)/,'~').replace(/^[A-Za-z]:\\Users\\[^\\]+(?=\\|$)/,'~');
 const issueRank=level=>level==='error'?0:level==='warn'?1:2;
 const stateCounts=list=>{const n={ok:0,warn:0,bad:0,off:0};for(const c of list)n[CHART_STATE[containerState(c)]||'off']++;return n;};
 // The same bar as the overview chart. A click opens every container with its own controls, like Docker Desktop;
@@ -374,7 +381,7 @@ function inspectProject(p){
  actions.append(button(t(kept?'action.unkeep':'action.keep'),'subtle',()=>toggleKeep(p.name),false,t('details.keepTitle'),'star'));
  const dirs=[...new Set([p.directory,...p.sources.map(s=>s.directory)].filter(Boolean))];
  // Application names are product names and stay as they are in every language.
- if(dirs.length)[['finder','Finder','folder'],['terminal','Terminal','square-terminal'],['vscode','VS Code','code']].forEach(([app,label,ic])=>actions.append(button(label,'subtle',()=>openIn(p,app,dirs[0]),false,t('details.openTitle',{path:dirs[0]}),ic)));
+ if(dirs.length)[['finder',ON_MAC?'Finder':'File Explorer','folder'],['terminal','Terminal','square-terminal'],['vscode','VS Code','code']].forEach(([app,label,ic])=>actions.append(button(label,'subtle',()=>openIn(p,app,dirs[0]),false,t('details.openTitle',{path:dirs[0]}),ic)));
  const target=$('inspectContent');target.replaceChildren();
  const makeRow=(key,value)=>{const row=el('div','detailrow');row.append(el('strong','',key),el('span','',String(value||'—')));target.append(row);};
  makeRow(t('details.status'),[t('details.statusValue',{status:t(STATUS_KEYS[p.status]||'status.unknown'),running:p.running,total:p.total}),p.oneoffs?t('details.oneoffs',{count:p.oneoffs}):''].filter(Boolean).join(' · '));
@@ -441,7 +448,48 @@ function renderGroups(){
 }
 
 // Cheap host figures, polled with the project list.
-async function loadHost(){try{hostData=await api('/api/host');renderOverview();}catch{}}
+async function loadHost(){try{hostData=await api('/api/host');renderOverview();renderSystem();}catch{}}
+// Network quality, on click only: the server times a connection to Docker Hub and Cloudflare (nothing is
+// downloaded). The traffic above says how busy the network is; this says how quick it answers.
+let netCheck=null,netChecking=false;
+const NET_LEVEL={fast:['sys.netFast','●'],ok:['sys.netOk','●'],slow:['sys.netSlow','▲'],offline:['sys.netOffline','✕']};
+function renderNetCheck(){
+ const b=$('sysNetCheck'),r=$('sysNetRating');
+ b.disabled=netChecking;b.textContent=t(netChecking?'sys.netChecking':netCheck?'sys.netRecheck':'sys.netCheck');b.title=t('sys.netCheckHint');
+ if(!netCheck){r.replaceChildren();r.className='netrating';r.title='';return;}
+ const [key,glyph]=NET_LEVEL[netCheck.level]||NET_LEVEL.offline,ms=x=>x.ms!=null?t('sys.netTargetMs',{ms:x.ms,level:t(NET_LEVEL[x.level]?.[0]||'sys.netOk')}):t('sys.netUnreachable');
+ r.className='netrating lvl-'+netCheck.level;
+ r.replaceChildren(el('i','',glyph),document.createTextNode(netCheck.ms!=null?t('sys.netRating',{level:t(key),ms:netCheck.ms}):t(key)));
+ r.title=t('sys.netCheckTitle',{targets:netCheck.targets.map(x=>`${x.name} ${ms(x)}`).join(' · '),time:clock(netCheck.checkedAt)});
+}
+async function checkNetwork(){
+ if(netChecking)return;netChecking=true;renderNetCheck();
+ try{netCheck=(await api('/api/network-check','POST',{})).check;}catch(e){toast(e.message);}
+ finally{netChecking=false;renderNetCheck();renderSystem();}
+}
+$('sysNetCheck').onclick=checkNetwork;
+// Sidebar: the drive of the home folder and the network traffic now. A speed needs two readings, so a
+// page that has none yet asks again a few seconds later instead of waiting for the next poll.
+const fmtRate=n=>fmtDisk(n)+'/s';
+let netRetries=0;
+function renderSystem(){
+ const host=hostData?.host,d=host?.disk,n=host?.network,diskRow=$('sysDisk'),netRow=$('sysNet');
+ // A page newer than the server still running (updated without a restart) gets no such figures at all.
+ const stale=!!host&&!('disk' in host),restart=stale?t('sys.restart'):'';
+ if(d?.total>0){
+  const pct=Math.round(d.used/d.total*100),level=pct>=95?'danger':pct>=85?'warning':'accent',sizes={used:fmtDisk(d.used),total:fmtDisk(d.total),free:fmtDisk(d.free)};
+  $('sysDiskValue').textContent=t('sys.diskValue',sizes);setMeter($('sysDiskMeter'),d.used/d.total,level);
+  const free=$('sysDiskFree');free.textContent=t('sys.diskFree',sizes);free.className=level==='danger'?'textdanger':level==='warning'?'textwarning':'';
+  diskRow.title=[t('sys.diskTitle',{...sizes,pct,path:d.path}),d.purgeable>=1e9?t('sys.diskPurgeable',{size:fmtDisk(d.purgeable)}):''].filter(Boolean).join(' ');
+ }else{$('sysDiskValue').textContent='—';setMeter($('sysDiskMeter'),0,'accent');$('sysDiskFree').textContent=restart;$('sysDiskFree').className=stale?'textwarning':'';diskRow.title=restart;}
+ if(n&&n.rxPerSec!=null){
+  netRetries=0;$('sysDown').textContent=fmtRate(n.rxPerSec);$('sysUp').textContent=fmtRate(n.txPerSec);
+  netRow.title=[t('sys.netTitle',{down:fmtRate(n.rxPerSec),up:fmtRate(n.txPerSec),window:n.windowSec}),$('sysNetRating').title].filter(Boolean).join('\n');
+ }else{
+  $('sysDown').textContent=$('sysUp').textContent=n?'…':'—';netRow.title=stale?restart:t(n?'sys.netMeasuring':'sys.netUnavailable');
+  if(n&&netRetries<3){netRetries++;setTimeout(loadHost,3000);}
+ }
+}
 // `docker stats` (~2 s of Docker CPU): only when the user asks.
 async function refreshResources(){
  if(working.has('stats'))return;working.add('stats');renderControls();renderOverview();renderSuggestions();
@@ -697,7 +745,7 @@ function renderLogs(){
  $('logsNote').textContent=t(only?'logs.noteErrors':'logs.note',{shown:shown.length,total:lines.length,count:lines.length});out.scrollTop=out.scrollHeight;
 }
 $('reloadLogs').onclick=reloadLogs;$('logService').onchange=reloadLogs;$('logTail').onchange=reloadLogs;$('logErrors').onchange=renderLogs;
-$('copyLogCmd').onclick=()=>{const s=$('logService').value;copy(`cd /tmp && docker compose -p ${logProject} logs -f --tail 200${s?' '+s:''}`);};
+$('copyLogCmd').onclick=()=>{const s=$('logService').value;copy(`${PLATFORM==='win32'?'cd $env:TEMP; ':'cd /tmp && '}docker compose -p ${logProject} logs -f --tail 200${s?' '+s:''}`);};
 
 document.querySelectorAll('.closeDialog').forEach(b=>b.onclick=()=>$('projectDialog').close());document.querySelectorAll('.closeLogs').forEach(b=>b.onclick=()=>$('logsDialog').close());
 document.querySelectorAll('.closeInspect').forEach(b=>b.onclick=()=>$('inspectDialog').close());
@@ -912,6 +960,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now(
   if(workspace.language&&workspace.language!==I.lang)await setLanguage(workspace.language,false);
   else if(!workspace.language&&I18N.valid(local))await setLanguage(I.lang,true);
   await refresh();renderAdvisorAll();loadHost();loadPorts();restoreMeasurements();
+  api('/api/network-check').then(r=>{netCheck=r.check;renderNetCheck();},()=>{});
   setInterval(()=>{if(!document.hidden){refresh();loadHost();}},15000);
  }catch(e){alertMessage(e.message);}
 })();

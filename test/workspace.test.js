@@ -16,7 +16,8 @@ test('workspace and projects are saved without dropping each other or unknown ke
  const saved=JSON.parse(fs.readFileSync(FILE,'utf8'));
  assert.deepEqual(saved.projects.map(p=>p.name),['old','new']);assert.deepEqual(saved.keepRunning,['infra']);assert.equal(saved.groups[0].name,'legacy');
  assert.deepEqual(Object.keys(S.readWorkspace()).sort(),['keepRunning','language','theme']);
- assert.equal(fs.statSync(FILE).mode&0o777,0o600);
+ // Windows has no POSIX file modes; elsewhere the settings file is private to the user.
+ if(process.platform!=='win32')assert.equal(fs.statSync(FILE).mode&0o777,0o600);
 });
 test('a corrupt config is never overwritten',()=>{
  fs.writeFileSync(FILE,'{"projects": [');
@@ -122,7 +123,7 @@ test('measurements survive a reload and a restart; week-old ones are dropped',as
  const server=S.startServer(0);await new Promise(r=>server.once('listening',r));const base=`http://127.0.0.1:${server.address().port}`;
  try{
   await fetch(base+'/api/advisor?parts=health');
-  assert.ok(Date.parse((await (await fetch(base+'/api/measured')).json()).healthAt)>0);assert.equal(fs.statSync(MFILE).mode&0o777,0o600);
+  assert.ok(Date.parse((await (await fetch(base+'/api/measured')).json()).healthAt)>0);if(process.platform!=='win32')assert.equal(fs.statSync(MFILE).mode&0o777,0o600);
   // A file left by an earlier run: recent parts come back as they were, a week-old one is dropped.
   const now=Date.now(),at=now-120000,rows=[{key:'buildCache',count:1,size:1,reclaimable:1,risk:'safe',commands:[]}];
   fs.writeFileSync(MFILE,JSON.stringify({healthAt:now-60000,stats:{at:now-8*86400000,value:[]},disk:{at,value:{rows,unusedVolumes:[],generatedAt:new Date(at).toISOString()}},activity:[]}));
@@ -142,5 +143,21 @@ test('static files include the i18n runtime, both dictionaries and the icons, no
   }
   const font=await fetch(base+'/fonts/be-vietnam-pro-400-vietnamese.woff2');assert.equal(font.status,200);assert.equal(font.headers.get('content-type'),'font/woff2');assert.match(font.headers.get('cache-control'),/immutable/);
   for(const f of ['/locales/fr.json','/server.js','/locales/../server.js','/fonts/OFL.txt','/fonts/missing.woff2'])assert.equal((await fetch(base+f)).status,404,f);
+ }finally{await new Promise(r=>server.close(r));}
+});
+test('the host view adds the home drive and the network traffic, cheaply',async()=>{
+ const server=S.startServer(0);await new Promise(r=>server.once('listening',r));const base=`http://127.0.0.1:${server.address().port}`;
+ try{
+  const {host}=await (await fetch(base+'/api/host')).json();
+  assert.ok(host.disk.total>0&&host.disk.used>0&&host.disk.free>=0,'drive sizes');assert.equal(host.disk.used+host.disk.free,host.disk.total);assert.equal(host.disk.path,os.homedir());
+  // A speed needs two readings: the server takes one at start, so it is a number or still null, never missing.
+  if(host.network)assert.deepEqual(Object.keys(host.network).sort(),['rxPerSec','txPerSec','windowSec']);
+ }finally{await new Promise(r=>server.close(r));}
+});
+test('the network check runs only on an authorised click; reading the last result is free',async()=>{
+ const server=S.startServer(0);await new Promise(r=>server.once('listening',r));const base=`http://127.0.0.1:${server.address().port}`;
+ try{
+  assert.deepEqual(await (await fetch(base+'/api/network-check')).json(),{check:null},'nothing is measured until asked');
+  assert.equal((await fetch(base+'/api/network-check',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,403,'connecting out needs the session token');
  }finally{await new Promise(r=>server.close(r));}
 });

@@ -27,7 +27,7 @@ You need:
 
 - **Node.js 20+**
 - **Docker Desktop**, or Docker Engine with the `docker compose` v2 plugin, running
-- **macOS or Linux**. Opening Finder, Terminal or VS Code and the *Mac memory* card use macOS tools; everything else also works on Linux.
+- **macOS, Windows or Linux**. Everything works on all three, except: the Terminal buttons, the folder picker and opening Finder/File Explorer, Terminal or VS Code work on macOS and Windows; memory pressure and swap on the memory card are macOS only.
 
 **1. Get the code**
 
@@ -48,7 +48,7 @@ There is nothing to install first: the project has no dependencies.
 
 Your projects appear by themselves. Press `Ctrl+C` in the terminal to stop the dashboard.
 
-Need another port? Run `DEV_MANAGER_PORT=4174 npm start`. To keep it running after you close the terminal, use your usual process manager, or `nohup npm start >/tmp/docker-dev-manager.log 2>&1 &`.
+Need another port? Run `DEV_MANAGER_PORT=4174 npm start` (PowerShell: `$env:DEV_MANAGER_PORT=4174; npm start`). To keep it running after you close the terminal, use your usual process manager, or on macOS and Linux `nohup npm start >/tmp/docker-dev-manager.log 2>&1 &`.
 
 <details>
 <summary>All settings</summary>
@@ -77,7 +77,7 @@ The **[user guide](docs/guide.en.md)** walks through every screen, step by step:
 
 | | |
 |---|---|
-| 📊 **Overview at a glance** | Docker health, running projects, container RAM, Mac memory and reclaimable disk on one row, plus charts of containers by state and RAM by project. |
+| 📊 **Overview at a glance** | Docker health, running projects, container RAM, your computer's memory and reclaimable disk on one row, plus charts of containers by state and RAM by project. The sidebar keeps disk space and network traffic in view, and a one-click check rates the network Fast, OK or Slow. |
 | 🔌 **Ports** | Who holds each host port, which ports stopped projects will need back, and the nearest free ones. |
 | 🔁 **Why it is not running** | Crash loops, exit codes in plain words, out-of-memory kills and failed starts, each one click away from the right log, errors only if you like. |
 | 🧠 **Free up memory** | Projects sorted by RAM against the Docker VM limit, idle ones spotted between two measurements, and a review of what would break before anything stops. |
@@ -88,6 +88,7 @@ The **[user guide](docs/guide.en.md)** walks through every screen, step by step:
 ## Built for everyday use
 
 - ⚡ **Nothing to sign up for**: no database, no account, no cloud. One Node process on your machine, and your data never leaves it.
+- 🖥️ **Runs where you work**: macOS, Windows and Linux.
 - 🛡️ **Safe by default**: every action is checked first. A taken port blocks a start, and anything that depends on what you stop is pointed out. Nothing is stopped or deleted automatically.
 - 🪶 **Light by default**: about 15 MB of RAM and no CPU at rest. Measurements that cost Docker a few seconds run only when you click their button.
 - 🌗 **Comfortable**: light and dark themes, Vietnamese and English. Your choices and the last measurements stay after a reload.
@@ -96,7 +97,7 @@ It complements Docker Desktop rather than replacing it.
 
 ## Security
 
-This is a **single-user local tool**. It listens on `127.0.0.1` only, rejects requests whose `Host` is not `localhost`, and requires a per-session token and a localhost `Origin` for every change. Commands run with your own Docker permissions. Do not expose it on a network or through a tunnel.
+This is a **single-user local tool**. It listens on `127.0.0.1` only, rejects requests whose `Host` is not `localhost`, and requires a per-session token and a localhost `Origin` for every change. Commands run with your own Docker permissions. Its only connection to the Internet is the network check in the sidebar, and only when you click it: it opens and closes a connection to `registry-1.docker.io` and `1.1.1.1` to time it; nothing is sent or downloaded. Do not expose it on a network or through a tunnel.
 
 <details>
 <summary>Optional: open it with a local domain through a reverse proxy</summary>
@@ -121,7 +122,7 @@ server {
 <details>
 <summary>Settings file</summary>
 
-Settings are saved in `~/.config/docker-dev-manager/projects.json`. The file is created the first time you save something: an imported project, *keep running*, the language or the theme.
+Settings are saved in `~/.config/docker-dev-manager/projects.json` (on Windows `%USERPROFILE%\.config\docker-dev-manager\projects.json`). The file is created the first time you save something: an imported project, *keep running*, the language or the theme.
 
 ```json
 {
@@ -144,21 +145,22 @@ Writes are atomic with mode `0600`, and keys are preserved. A corrupt file is ne
 server.js            HTTP server, Docker CLI calls, preflight checks, background jobs, saved measurements
 lib/analysis.js      pure rules: grouping, problems, dependencies, ports, resources, disk, container preflight
 lib/advisor.js       health score, waste and ranked recommendations
+lib/platform.js      what differs per system: terminals, folder picker, Finder/File Explorer, paths, commands to copy
 public/              page (index.html, app.js, style.css), i18n.js, locales/, icons, fonts/
 assets/icons/        icon sources; build.sh regenerates favicon.ico and apple-touch-icon.png
 docs/                user guides (en, vi) and screenshots
 test/                node:test suites
 ```
 
-- `npm test` runs the unit, HTTP and translation tests. It never changes Docker state and uses a temporary settings folder.
+- `npm test` runs the unit, HTTP and translation tests. It never changes Docker state and uses a temporary settings folder. GitHub Actions runs it on macOS, Windows and Ubuntu for every push and pull request.
 - `npm run test:docker` runs an optional test against the real Docker Engine. It creates throwaway `ddmit*` projects (image `nginx:alpine`, port 47391) and removes them afterwards.
 - **Text and languages**: every visible string lives in `public/locales/en.json` and `vi.json`; the server sends `{key, params}` messages, never sentences. Add a key to both files and reference it as a literal (`t('section.key')`, `A.msg('section.key', …)` or `data-i18n="section.key"`). `npm test` fails on missing, unused or mismatched keys.
 - **How actions run**:
   - A project's Start, Stop, Restart and Logs use `docker compose -p <name> <command>` from container labels. This needs no Compose file and keeps the `depends_on` order. It runs in an empty folder so Compose cannot pick up another project's file.
   - One container's Start, Stop and Restart use `docker start|stop|restart <id>`: only that container, like Docker Desktop.
-  - The container shell opens Terminal with `docker exec -it <container>` (bash when available) through a throwaway `.command` file, so macOS asks for no permission to control Terminal. The folder button opens the host folder of the bind mount behind the container's working directory.
+  - The container shell runs `docker exec -it <container>` (bash when available). On macOS it opens Terminal through a throwaway `.command` file, so macOS asks for no permission to control Terminal; on Windows `start` opens it in a new console window (Windows Terminal on Windows 11). What each system runs lives in `lib/platform.js`, and `test/platform.test.js` pins the exact commands per system. The folder button opens the host folder of the bind mount behind the container's working directory.
   - Up and Down use the imported project's Compose file.
-- **How measurements run**: the page polls only the project list and this Mac's memory, every 15 seconds while it is visible. The health check, `docker stats` and `docker system df -v` each run on their own request; `/api/advisor` only combines the parts already measured and never starts them itself.
+- **How measurements run**: the page polls only the project list and this computer's memory, every 15 seconds while it is visible. The health check, `docker stats` and `docker system df -v` each run on their own request; `/api/advisor` only combines the parts already measured and never starts them itself.
 
 </details>
 

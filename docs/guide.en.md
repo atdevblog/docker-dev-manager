@@ -32,20 +32,20 @@ cd docker-dev-manager
 npm start
 ```
 
-There is nothing to install: the project has no npm dependencies. Open **http://localhost:4173**. Keep the terminal open while you use it; press `Ctrl+C` to stop. To use another port: `DEV_MANAGER_PORT=4174 npm start`.
+There is nothing to install: the project has no npm dependencies. Open **http://localhost:4173**. Keep the terminal open while you use it; press `Ctrl+C` to stop. On Windows, run these in PowerShell with Docker Desktop started. To use another port: `DEV_MANAGER_PORT=4174 npm start` (PowerShell: `$env:DEV_MANAGER_PORT=4174; npm start`).
 
 ## 2. The screen at a glance
 
 ![Overview](images/en-overview.png)
 
-- **Sidebar**, in three groups with one page each: *Explore* (**Overview**, **Projects**, **Containers**), *Understand* (**Health**, **Resources**, **Ports**) and *Maintain* (**Cleanup**). The dot at the bottom shows whether Docker Engine is reachable, and the button next to it folds the sidebar to icons. Every page has its own address (`#projects`, `#containers`…), so a reload stays where you were.
+- **Sidebar**, in three groups with one page each: *Explore* (**Overview**, **Projects**, **Containers**), *Understand* (**Health**, **Resources**, **Ports**) and *Maintain* (**Cleanup**). Near the bottom, *This Mac* (*This computer* on Windows and Linux) shows the drive of your home folder, used of total with what is free, and the network traffic now: download ↓ and upload ↑ per second, averaged since the previous reading. It is the traffic flowing, not a speed test; hover either line for details. **Check network** times a connection to Docker Hub and Cloudflare (about a second, nothing downloaded) and rates it: *Fast* under 50 ms, *OK* up to 150 ms, *Slow* above, *Offline* when neither answers. The rating follows the quicker of the two; hover it to see each one, for example a slow Docker Hub that makes image pulls drag. The dot at the bottom shows whether Docker Engine is reachable, and the button next to it folds the sidebar to icons. Every page has its own address (`#projects`, `#containers`…), so a reload stays where you were.
 - **Top bar**: where you are, the language (*Tiếng Việt / English*), the light/dark theme switch, **Refresh**, and **Add manually** for a project that has no containers yet. The theme follows macOS until you pick one; the choice is saved with the language.
 - **Overview** says what is happening now:
   - Five cards (click one to open its page):
     - *Docker health*: the score out of 100 with its status (Healthy, Needs attention, Unhealthy), the number of problems and when it was checked. It says *Not checked* until you click **Check** on the card (about half a second). It turns red when Docker Engine is unreachable.
     - *Running projects*: running out of total, with the number of containers and of projects that need attention.
     - *Container RAM*: memory used by containers against the Docker Desktop VM size (with a meter), CPU in cores, and the largest project. It needs `docker stats` (about 2 seconds of Docker work), so it says *Not measured* until you click **Measure** on the card.
-    - *Mac memory*: memory used (counted like Activity Monitor) against the total, with a meter whose colour follows macOS memory pressure, plus swap and CPU. Heavy swap is highlighted when memory is short.
+    - *Mac memory*: memory used (counted like Activity Monitor) against the total, with a meter whose colour follows macOS memory pressure, plus swap and CPU. Heavy swap is highlighted when memory is short. On Windows and Linux the card is called *Computer memory* and shows memory in use and CPU, without memory pressure.
     - *Reclaimable disk*: what can be cleaned safely, plus what needs review first. Click **Analyze** on the card (`docker system df -v`, a few seconds).
   - **Containers by project**: one bar per project, as long as its number of containers and split by state (running, unhealthy or paused, failed or restarting, stopped), with *running / total* at the end. Hover a bar for the counts, click a name for its details, **View table** opens the Containers page.
   - **RAM by project**: projects sorted by memory, with their share of the Docker VM, from the last *Container RAM* measurement. Containers without a project are grouped as *Standalone containers*.
@@ -130,8 +130,8 @@ Before every action the dashboard checks for problems. If everything is fine, it
 
 Like Docker Desktop, every container can be controlled on its own. On a card, click the **container bar** (or open **Details**). Each container gets a row with its name, then its state, RAM and CPU (once measured) and its host ports (click one to open it in the browser), and its buttons: **▶ Start** or **■ Stop**, **↻ Restart**, **Logs**, and two Terminal buttons:
 
-- The **terminal** icon opens Terminal with a shell inside the container (`docker exec`, bash when available), already in its working directory, for example `/var/www/api`. Only for a running container.
-- The **folder** icon opens Terminal on your Mac at the container's source folder: the folder mounted on its working directory, for example `~/Projects/api`. Greyed out when the code lives inside the image or a volume.
+- The **terminal** icon opens Terminal with a shell inside the container (`docker exec`, bash when available), already in its working directory, for example `/var/www/api`. Only for a running container. On Windows it opens in a new console window (Windows Terminal on Windows 11).
+- The **folder** icon opens Terminal on your computer at the container's source folder (PowerShell on Windows): the folder mounted on its working directory, for example `~/Projects/api`. Greyed out when the code lives inside the image or a volume.
 
 
 - Each state has its own colour, icon and words on the row, and the same colour in the card's container bar: **● Running** (green), **‖ Paused** (amber), **■ Stopped** (grey), **✕ Failed** with its exit code or *Out of memory* (red), **↻ Restarting** (red, a crash loop), **◐ Starting** and **○ Created** (blue). A stop with the usual codes (0, 137, 143) counts as stopped, not failed.
@@ -153,7 +153,7 @@ The card shows the most serious problem under the project's name. Click the name
 - **Containers** lists every service with its state, exit code, restart count, health, ports and limits, plus a **Log** link.
 - **Needs / Used by** show links to other projects through shared Docker networks.
 - **Do it in a terminal** lists the exact commands, ready to copy.
-- **Finder / Terminal / VS Code** open the project folder (macOS).
+- **Finder / Terminal / VS Code** open the project folder (macOS; on Windows **File Explorer / Terminal / VS Code**).
 
 Containers with restart policy `unless-stopped` or `always` that are stopped were stopped on purpose, so they are not reported as problems.
 
@@ -240,7 +240,7 @@ To import, open **Details** and click **＋ Import project**. This is offered wh
 - the folder (absolute path);
 - the Compose file name relative to that folder (for example `docker-compose.yml`).
 
-**Choose…** next to the folder opens a Finder window: pick the folder and the dashboard fills in its path, the Compose file it finds there and, if empty, the name. The description field takes up to 240 characters on several lines.
+**Choose…** next to the folder opens a Finder window (a folder dialog on Windows): pick the folder and the dashboard fills in its path, the Compose file it finds there and, if empty, the name. The description field takes up to 240 characters on several lines.
 
 Up always shows a review first, and checks the Compose file and ports. Down asks for confirmation.
 
@@ -256,5 +256,5 @@ Use **Tiếng Việt / English** in the header. The page switches instantly and 
 | A project is missing | Only projects that still have containers are found. Click **Scan Docker**, or **Add manually**. |
 | Start is blocked | Read the red message: it names the container holding the port, or the missing network. |
 | `N sources` badge | The project name was started from different folders or Compose file sets. Details lists each source, and Stop/Start act on all of them. |
-| Port 4173 already in use | Run `DEV_MANAGER_PORT=4174 npm start`. |
+| Port 4173 already in use | Run `DEV_MANAGER_PORT=4174 npm start` (PowerShell: `$env:DEV_MANAGER_PORT=4174; npm start`). |
 | No CPU/RAM figures | They are measured on demand: click **Measure** on the *Container RAM* card. If they stay empty, run `docker stats --no-stream` in a terminal to check Docker. |

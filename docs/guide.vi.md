@@ -32,20 +32,20 @@ cd docker-dev-manager
 npm start
 ```
 
-Không cần cài thêm gì vì dự án không có dependency npm nào. Mở **http://localhost:4173**. Giữ terminal mở trong lúc dùng, nhấn `Ctrl+C` để tắt. Muốn dùng port khác: `DEV_MANAGER_PORT=4174 npm start`.
+Không cần cài thêm gì vì dự án không có dependency npm nào. Mở **http://localhost:4173**. Giữ terminal mở trong lúc dùng, nhấn `Ctrl+C` để tắt. Trên Windows, chạy các lệnh này trong PowerShell khi Docker Desktop đã bật. Muốn dùng port khác: `DEV_MANAGER_PORT=4174 npm start` (PowerShell: `$env:DEV_MANAGER_PORT=4174; npm start`).
 
 ## 2. Tổng quan màn hình
 
 ![Tổng quan](images/vi-overview.png)
 
-- **Thanh bên** chia ba nhóm, mỗi mục là một trang: *Khám phá* (**Tổng quan**, **Dự án**, **Container**), *Theo dõi* (**Sức khỏe**, **Tài nguyên**, **Port**) và *Bảo trì* (**Dọn ổ đĩa**). Chấm màu ở dưới cùng cho biết có kết nối được Docker Engine hay không, nút bên cạnh thu gọn thanh bên chỉ còn biểu tượng. Mỗi trang có địa chỉ riêng (`#projects`, `#containers`…), nên khi reload bạn vẫn ở đúng trang.
+- **Thanh bên** chia ba nhóm, mỗi mục là một trang: *Khám phá* (**Tổng quan**, **Dự án**, **Container**), *Theo dõi* (**Sức khỏe**, **Tài nguyên**, **Port**) và *Bảo trì* (**Dọn ổ đĩa**). Gần cuối là khối *Máy Mac này* (*Máy này* trên Windows và Linux): ổ chứa thư mục cá nhân của bạn, đã dùng bao nhiêu trên tổng và còn trống bao nhiêu, cùng lưu lượng mạng hiện tại: tải xuống ↓ và tải lên ↑ mỗi giây, trung bình từ lần đọc trước. Đây là lưu lượng đang chạy, không phải đo tốc độ đường truyền; rê chuột lên từng dòng để xem chi tiết. Nút **Kiểm tra mạng** đo thời gian mở kết nối tới Docker Hub và Cloudflare (khoảng một giây, không tải dữ liệu nào) rồi xếp loại: *Nhanh* dưới 50 ms, *Ổn* tới 150 ms, *Chậm* khi cao hơn, *Mất kết nối* khi cả hai không trả lời. Kết quả chung theo nơi trả lời nhanh hơn; rê chuột lên để xem từng nơi, ví dụ Docker Hub chậm khiến việc pull image lâu. Chấm màu ở dưới cùng cho biết có kết nối được Docker Engine hay không, nút bên cạnh thu gọn thanh bên chỉ còn biểu tượng. Mỗi trang có địa chỉ riêng (`#projects`, `#containers`…), nên khi reload bạn vẫn ở đúng trang.
 - **Thanh trên cùng:** bạn đang ở đâu, ngôn ngữ (*Tiếng Việt / English*), nút đổi giao diện sáng/tối, **Làm mới**, và **Thêm thủ công** cho dự án chưa có container. Giao diện theo macOS cho đến khi bạn chọn; lựa chọn được lưu cùng ngôn ngữ.
 - **Tổng quan** cho biết chuyện gì đang diễn ra:
   - Năm thẻ (bấm vào thẻ để mở trang của nó):
     - *Sức khỏe Docker*: điểm trên 100 kèm trạng thái (Khỏe, Cần chú ý, Không ổn), số vấn đề và thời điểm kiểm tra. Thẻ ghi *Chưa kiểm tra* cho đến khi bạn bấm **Kiểm tra** trên thẻ (khoảng nửa giây). Thẻ chuyển đỏ khi mất kết nối Docker Engine.
     - *Dự án đang chạy*: số đang chạy trên tổng số, kèm số container và số dự án cần chú ý.
     - *RAM container*: RAM container đang dùng so với dung lượng VM của Docker Desktop (có thanh đo), CPU tính theo nhân, và dự án ngốn nhiều nhất. Thẻ cần `docker stats` (tốn khoảng 2 giây xử lý của Docker), nên ghi *Chưa đo* cho đến khi bạn bấm **Đo** trên thẻ.
-    - *Bộ nhớ máy Mac*: bộ nhớ đã dùng (tính như Activity Monitor) trên tổng, thanh đo đổi màu theo áp lực bộ nhớ của macOS, kèm swap và CPU. Swap lớn được làm nổi bật khi máy thiếu bộ nhớ.
+    - *Bộ nhớ máy Mac*: bộ nhớ đã dùng (tính như Activity Monitor) trên tổng, thanh đo đổi màu theo áp lực bộ nhớ của macOS, kèm swap và CPU. Swap lớn được làm nổi bật khi máy thiếu bộ nhớ. Trên Windows và Linux thẻ có tên *Bộ nhớ máy này*, hiện bộ nhớ đang dùng và CPU, không có áp lực bộ nhớ.
     - *Ổ đĩa thu hồi được*: phần dọn được an toàn, cộng phần cần xem lại trước. Bấm **Phân tích** trên thẻ (`docker system df -v`, mất vài giây).
   - **Container theo dự án:** mỗi dự án một thanh, dài theo số container và chia màu theo trạng thái (đang chạy, không khỏe hoặc tạm dừng, lỗi hoặc khởi động lại, đã dừng), cuối thanh ghi *đang chạy / tổng*. Rê chuột lên thanh để xem số lượng, bấm vào tên để xem chi tiết, **Xem bảng** mở trang Container.
   - **RAM theo dự án:** các dự án xếp theo bộ nhớ, kèm tỷ lệ trên VM Docker, lấy từ lần đo *RAM container* gần nhất. Container không thuộc dự án nào được gộp thành *Container độc lập*.
@@ -130,8 +130,8 @@ Trước mỗi thao tác, dashboard đều kiểm tra trước. Nếu không có
 
 Giống Docker Desktop, mỗi container có thể điều khiển riêng. Trên card, bấm vào **thanh container** (hoặc mở **Chi tiết**). Mỗi container là một dòng gồm tên, bên dưới là trạng thái, RAM và CPU (sau khi đã đo) và các port trên máy (bấm vào để mở trong trình duyệt), cùng các nút: **▶ Khởi động** hoặc **■ Dừng**, **↻ Khởi động lại**, **Nhật ký**, và hai nút Terminal:
 
-- Icon **terminal** mở Terminal với shell bên trong container (`docker exec`, dùng bash nếu có), vào sẵn thư mục làm việc của nó, ví dụ `/var/www/api`. Chỉ dùng được khi container đang chạy.
-- Icon **thư mục** mở Terminal trên máy Mac tại thư mục mã nguồn của container, tức thư mục được gắn vào thư mục làm việc của nó, ví dụ `~/Projects/api`. Nút mờ khi mã nằm trong image hoặc volume.
+- Icon **terminal** mở Terminal với shell bên trong container (`docker exec`, dùng bash nếu có), vào sẵn thư mục làm việc của nó, ví dụ `/var/www/api`. Chỉ dùng được khi container đang chạy. Trên Windows nó mở trong một cửa sổ console mới (Windows Terminal trên Windows 11).
+- Icon **thư mục** mở Terminal trên máy bạn (PowerShell trên Windows) tại thư mục mã nguồn của container, tức thư mục được gắn vào thư mục làm việc của nó, ví dụ `~/Projects/api`. Nút mờ khi mã nằm trong image hoặc volume.
 
 
 - Mỗi trạng thái có màu, biểu tượng và chữ riêng trên dòng container, và cùng màu đó trên thanh container của card: **● Đang chạy** (xanh lá), **‖ Tạm dừng** (vàng), **■ Đã dừng** (xám), **✕ Lỗi** kèm mã thoát hoặc *Hết bộ nhớ* (đỏ), **↻ Đang khởi động lại** (đỏ, crash loop), **◐ Đang khởi động** và **○ Mới tạo** (xanh dương). Dừng với mã thông thường (0, 137, 143) được tính là đã dừng, không phải lỗi.
@@ -153,7 +153,7 @@ Card hiện vấn đề nghiêm trọng nhất ngay dưới tên dự án. Bấm
 - **Container** liệt kê từng service với trạng thái, mã thoát, số lần restart, health, port, giới hạn tài nguyên, kèm liên kết **Nhật ký**.
 - **Phụ thuộc / Được dùng bởi** cho biết liên kết với dự án khác qua network Docker dùng chung.
 - **Làm bằng terminal** có sẵn đúng các lệnh để sao chép.
-- **Finder / Terminal / VS Code** mở thư mục dự án (macOS).
+- **Finder / Terminal / VS Code** mở thư mục dự án (macOS; trên Windows là **File Explorer / Terminal / VS Code**).
 
 Container có restart policy `unless-stopped` hoặc `always` mà đang dừng thì đã được dừng có chủ đích, nên không bị báo là vấn đề.
 
@@ -240,7 +240,7 @@ Dashboard không bao giờ tự xóa bất cứ thứ gì.
 - thư mục (đường dẫn tuyệt đối);
 - tên file Compose, tương đối so với thư mục (ví dụ `docker-compose.yml`).
 
-Nút **Chọn…** cạnh ô thư mục mở cửa sổ Finder: chọn thư mục là dashboard tự điền đường dẫn, file Compose tìm thấy trong đó và, nếu đang trống, tên dự án. Ô mô tả nhận tới 240 ký tự, viết được nhiều dòng.
+Nút **Chọn…** cạnh ô thư mục mở cửa sổ Finder (hộp chọn thư mục trên Windows): chọn thư mục là dashboard tự điền đường dẫn, file Compose tìm thấy trong đó và, nếu đang trống, tên dự án. Ô mô tả nhận tới 240 ký tự, viết được nhiều dòng.
 
 Up luôn hiện cửa sổ xem lại trước, và kiểm tra file Compose cùng port. Down luôn yêu cầu xác nhận.
 
@@ -256,5 +256,5 @@ Dùng nút **Tiếng Việt / English** trên header. Trang chuyển ngay và gh
 | Thiếu một dự án | Chỉ tìm được dự án còn container. Bấm **Quét Docker**, hoặc **Thêm thủ công**. |
 | Khởi động bị chặn | Đọc thông báo đỏ: nó nêu container đang giữ port hoặc network bị thiếu. |
 | Badge `N nguồn` | Tên dự án được chạy từ các thư mục hoặc bộ file Compose khác nhau. Chi tiết liệt kê từng nguồn; Khởi động/Dừng tác động lên tất cả. |
-| Port 4173 đã bị dùng | Chạy `DEV_MANAGER_PORT=4174 npm start`. |
+| Port 4173 đã bị dùng | Chạy `DEV_MANAGER_PORT=4174 npm start` (PowerShell: `$env:DEV_MANAGER_PORT=4174; npm start`). |
 | Không có số liệu CPU/RAM | Số liệu chỉ đo khi bạn yêu cầu: bấm **Đo** trên thẻ *RAM container*. Nếu vẫn trống, chạy `docker stats --no-stream` trong terminal để kiểm tra Docker. |

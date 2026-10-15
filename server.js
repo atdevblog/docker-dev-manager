@@ -4,11 +4,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const net = require('node:net');
+const dns = require('node:dns').promises;
 const crypto = require('node:crypto');
-const {execFile} = require('node:child_process');
+const {execFile,spawn} = require('node:child_process');
 const {promisify} = require('node:util');
 const A = require('./lib/analysis');
 const Advisor = require('./lib/advisor');
+const PF = require('./lib/platform');
 const I18N = require('./public/i18n.js');
 // API errors carry the message descriptor for the UI plus an English rendering for curl/CLI users.
 const DICTS = {vi:require('./public/locales/vi.json'),en:require('./public/locales/en.json')};
@@ -18,6 +20,9 @@ const PORT = Number(process.env.DEV_MANAGER_PORT || 4173);
 // How long a project must stay quiet (no network traffic, CPU < 1%) before the advisor calls it idle.
 const IDLE_MINUTES = Number(process.env.DEV_MANAGER_IDLE_MINUTES) > 0 ? Number(process.env.DEV_MANAGER_IDLE_MINUTES) : 15;
 const HOST = '127.0.0.1';
+// Terminals, folders and texts that name the Mac differ per system (lib/platform.js).
+const PLATFORM = process.platform;
+const ON_MAC = PLATFORM==='darwin';
 const CONFIG_DIR = process.env.DEV_MANAGER_CONFIG_DIR || path.join(os.homedir(), '.config', 'docker-dev-manager');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'projects.json');
 // Last measurements, so a reload or a restart shows them again (with their time) instead of measuring.
@@ -30,7 +35,8 @@ const MAX_OUTPUT = 4 * 1024 * 1024;
 // Compose project names as they appear in container labels.
 const NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 const ACTIONS = {start:['start'],stop:['stop'],restart:['restart'],up:['up','-d'],down:['down']};
-const APPS = {finder:null,terminal:'Terminal',vscode:'Visual Studio Code'};
+// Apps a project folder can open in; what runs for each system is in lib/platform.js.
+const APPS = new Set(['finder','terminal','vscode']);
 const ACTION_KEYS = {start:'verb.start',stop:'verb.stop',restart:'verb.restart',up:'verb.up',down:'verb.down'};
 
 function respond(res, code, value) {
@@ -143,7 +149,7 @@ const dockerSnapshot = cached(2000, async()=>{
     docker(['network','ls','--format','{{.Name}}\t{{.Label "com.docker.compose.project"}}'],{timeout:12000})]);
   const raw=await inspectAll(ids.trim().split(/\s+/).filter(Boolean));
   const networks=new Map(nets.split('\n').filter(Boolean).map(line=>{const [n,owner='']=line.split('\t');return [n,owner];}));
-  return {raw,containers:raw.map(A.normalizeContainer),networks};
+  return {raw,containers:raw.map(c=>A.normalizeContainer(c,PLATFORM)),networks};
 });
 function importability(p) {
   const s=p.sources,labelsWork=A.msg('reason.labelsWork');
@@ -156,7 +162,7 @@ function importability(p) {
 }
 // Docker Compose metadata is advisory; discovery NEVER executes a Compose project.
 function discoverFromInspect(containers, registered = [], networks = null) {
-  const projects=A.summarizeProjects(containers.map(A.normalizeContainer));
+  const projects=A.summarizeProjects(containers.map(c=>A.normalizeContainer(c,PLATFORM)));
   if(networks)A.linkProjects(projects,networks);
   return projects.map(p=>{
     const exists=registered.some(r=>r.name===p.name),check=importability(p),s=p.sources;
@@ -177,7 +183,7 @@ function mergeManaged(discovered, registered) {
     }
     map.set(reg.name,p);
   }
-  return [...map.values()].map(p=>({...p,commands:A.cliCommands(p)})).sort((a,b)=>a.name.localeCompare(b.name));
+  return [...map.values()].map(p=>({...p,commands:A.cliCommands(p,PLATFORM)})).sort((a,b)=>a.name.localeCompare(b.name));
 }
 async function currentProjects(maxAge) {
   const snapshot=await dockerSnapshot(maxAge),registered=readConfig();
@@ -226,10 +232,64 @@ async function hostMemory() {
   try{return {...A.parseMeminfo(fs.readFileSync('/proc/meminfo','utf8')),pressure:''};}
   catch{return {total,used:total-os.freemem(),cached:0,swap:{total:0,used:0},pressure:''};}
 }
-async function hostInfo(cpu) {
-  return {cores:os.cpus().length,...cpu,memory:await hostMemory()};
+// The drive that holds the home folder (on macOS the APFS container it shares with the system). On macOS
+// the free space includes purgeable space, read like System Settings does (about 0.1 s of CPU, so kept
+// for a minute); the folder goes to the script as an argument, never into it.
+const MAC_CAPACITY="function run(argv){ObjC.import('Foundation');const k='NSURLVolumeAvailableCapacityForImportantUsageKey';const r=$.NSURL.fileURLWithPath(argv[0]).resourceValuesForKeysError(ObjC.wrap([k]),null);return String(ObjC.unwrap(r.objectForKey(k)));}";
+const macAvailable=cached(60000,async()=>{const n=Number((await exec('/usr/bin/osascript',['-l','JavaScript','-e',MAC_CAPACITY,os.homedir()],{timeout:5000})).stdout.trim());return n>0?n:null;});
+async function hostDisk() {
+  let s;try{s=fs.statfsSync(os.homedir());}catch{return null;}
+  const important=ON_MAC?await macAvailable().catch(()=>null):null;
+  return A.diskView({total:s.blocks*s.bsize,free:s.bavail*s.bsize,important,path:os.homedir()});
 }
-// Cheap enough to poll (~20 ms): this Mac's memory and CPU, plus the Docker VM size (cached).
+// Network traffic as a speed: bytes counted since boot, compared with the previous reading. A reading
+// within 2 s of the last one (two calls at once) reuses its figure; one older than 2 min starts over.
+async function netCounters() {
+  if(PLATFORM==='darwin')return A.parseNetstatIb((await exec('/usr/sbin/netstat',['-ibn'],{timeout:5000})).stdout);
+  if(PLATFORM==='linux')return A.parseProcNetDev(fs.readFileSync('/proc/net/dev','utf8'));
+  if(PLATFORM==='win32')return A.parseNetstatE((await exec('netstat',['-e'],{timeout:5000,windowsHide:true})).stdout);
+  return null;
+}
+let lastNet=null,lastSpeed=null;
+async function hostNetwork() {
+  const now=Date.now(),prev=lastNet;
+  if(prev&&now-prev.at<2000)return lastSpeed;
+  const c=await netCounters().catch(()=>null);if(!c)return null;
+  lastNet={at:now,...c};
+  if(!prev||now-prev.at>120000||c.rx<prev.rx||c.tx<prev.tx)return lastSpeed={rxPerSec:null,txPerSec:null,windowSec:0};
+  const sec=(now-prev.at)/1000;
+  return lastSpeed={rxPerSec:Math.round((c.rx-prev.rx)/sec),txPerSec:Math.round((c.tx-prev.tx)/sec),windowSec:Math.round(sec)};
+}
+// The only connection to the Internet, and only on click: open and close a TCP connection to Docker
+// Hub (where images come from) and to Cloudflare's resolver, three times each. Nothing is sent or downloaded.
+const NET_TARGETS=[{name:'Docker Hub',host:'registry-1.docker.io',port:443},{name:'Cloudflare',host:'1.1.1.1',port:443}];
+// The name is resolved first and an IPv4 address preferred: Node's own dual-stack attempt gives each
+// address only 250 ms, which a slow link (mobile data to a far server) never meets.
+async function resolveHost(host){
+  if(net.isIP(host))return host;
+  try{const all=await dns.lookup(host,{all:true});return (all.find(a=>a.family===4)||all[0])?.address||null;}catch{return null;}
+}
+function connectTime(host,port,timeout=3000){
+  return new Promise(resolve=>{
+    const start=process.hrtime.bigint(),socket=net.connect({host,port});
+    const done=ms=>{socket.destroy();resolve(ms);};
+    socket.setTimeout(timeout,()=>done(null));socket.once('error',()=>done(null));
+    socket.once('connect',()=>done(Number(process.hrtime.bigint()-start)/1e6));
+  });
+}
+let lastNetCheck=null,netCheckRunning=null;
+function runNetworkCheck(){
+  netCheckRunning??=(async()=>{
+    const targets=await Promise.all(NET_TARGETS.map(async t=>{const address=await resolveHost(t.host),tries=[];for(let i=0;i<3;i++)tries.push(address?await connectTime(address,t.port):null);return {...t,tries};}));
+    return lastNetCheck={...A.networkCheck(targets),checkedAt:new Date().toISOString()};
+  })().finally(()=>{netCheckRunning=null;});
+  return netCheckRunning;
+}
+async function hostInfo(cpu) {
+  const [memory,network,disk]=await Promise.all([hostMemory(),hostNetwork(),hostDisk()]);
+  return {cores:os.cpus().length,...cpu,memory,disk,network};
+}
+// Cheap enough to poll (~30 ms): this computer's memory, CPU, disk and network, plus the Docker VM size (cached).
 async function hostView() {
   const cpu=hostCpu();
   const [vm,host]=await Promise.all([vmInfo().catch(()=>({memTotal:0,ncpu:0})),hostInfo(cpu).catch(()=>null)]);
@@ -263,8 +323,15 @@ async function measuredView() {
   return {healthAt:lastHealthAt?new Date(lastHealthAt).toISOString():null,resources,disk:d?.value||null};
 }
 // Listening TCP sockets of this user's processes (~0.1s). Root-owned listeners are invisible to lsof,
-// so a port check also probes the port directly.
+// so a port check also probes the port directly. Windows lists them with netstat and names them with tasklist.
 async function hostListeners() {
+  if (PLATFORM==='win32') {
+    const o={timeout:8000,maxBuffer:MAX_OUTPUT,windowsHide:true};
+    try {
+      const [tcp,tcp6,tasks]=await Promise.all([exec('netstat',['-ano','-p','TCP'],o),exec('netstat',['-ano','-p','TCPv6'],o).catch(()=>({stdout:''})),exec('tasklist',['/fo','csv','/nh'],o).catch(()=>({stdout:''}))]);
+      return A.parseNetstat(tcp.stdout+'\n'+tcp6.stdout,A.parseTasklist(tasks.stdout));
+    } catch {return [];}
+  }
   for (const bin of ['lsof','/usr/sbin/lsof','/usr/bin/lsof']) {
     try {const {stdout}=await exec(bin,['-nP','-iTCP','-sTCP:LISTEN','+c','0','-F','pcn'],{timeout:8000,maxBuffer:MAX_OUTPUT});return A.parseLsof(stdout);}
     // lsof exits 1 when it cannot read some processes but still prints the rest.
@@ -330,7 +397,7 @@ async function hostPortWarnings(targets,containers) {
   const held=new Set(containers.filter(c=>c.state==='running').flatMap(c=>c.ports.map(b=>b.port)));
   const ports=[...new Set(targets.flatMap(t=>t.ports||[]).filter(b=>['0.0.0.0','127.0.0.1','::1'].includes(b.ip)&&!held.has(b.port)).map(b=>b.port))];
   const out=[];
-  for(const port of ports)if(await listening(port))out.push(A.msg('preflight.hostListener',{port:String(port)}));
+  for(const port of ports)if(await listening(port))out.push(A.msg(ON_MAC?'preflight.hostListener':'preflight.hostListenerPc',{port:String(port)}));
   return out;
 }
 // Preflight for one project. Errors block the action (Docker would fail anyway); warnings inform.
@@ -391,49 +458,66 @@ async function containerPlanFor(action,p,c,ctx) {
   }
   return item;
 }
-// Terminal for one container: a shell inside it (docker exec lands in its working directory) or
-// macOS Terminal at its source folder. A throwaway .command file opens in Terminal without asking
-// for permission to control another app, as AppleScript would.
+// Terminal for one container: a shell inside it (docker exec lands in its working directory) or a
+// terminal at its source folder. What each system runs comes from lib/platform.js.
 const TERMINAL_DIR=path.join(os.tmpdir(),'docker-dev-manager-terminal');
 const DOCKER_NAME=/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
 function dockerPath(){for(const d of (process.env.PATH||'').split(':')){const f=path.join(d,'docker');try{fs.accessSync(f,fs.constants.X_OK);return f;}catch{}}return 'docker';}
+// Runs a launch description from lib/platform.js. Some programs (Explorer) report success with exit code 1.
+async function launch(l){
+  try{return await exec(l.file,l.args,{...l.options,...(l.env?{env:{...process.env,...l.env}}:{})});}
+  catch(e){if(l.okExitCodes?.includes(e.code))return {stdout:'',stderr:''};throw e;}
+}
+// For a program that keeps running (VS Code): resolves once it started, without waiting for it to exit.
+function spawnDetached(file,args){return new Promise((resolve,reject)=>{const child=spawn(file,args,{detached:true,stdio:'ignore'});child.once('error',reject);child.once('spawn',()=>{child.unref();resolve();});});}
 async function openTerminal(res,mode,c){
-  if(process.platform!=='darwin')return fail(res,501,A.msg('error.macOnly'));
+  if(!PF.supports(PLATFORM).terminal)return fail(res,501,A.msg('error.macOnly'));
   try{
     if(mode==='shell'){
       if(c.state!=='running')return fail(res,409,A.msg('error.notRunning'));
-      fs.mkdirSync(TERMINAL_DIR,{recursive:true,mode:0o700});
-      for(const f of fs.readdirSync(TERMINAL_DIR)){const old=path.join(TERMINAL_DIR,f);try{if(Date.now()-fs.statSync(old).mtimeMs>600000)fs.unlinkSync(old);}catch{}}
-      const target=DOCKER_NAME.test(c.name)?c.name:c.id,file=path.join(TERMINAL_DIR,`${target}-${crypto.randomBytes(4).toString('hex')}.command`);
-      // Vietnamese Telex rewrites keys with backspace + retype, which a raw container shell receives
-      // twice; the shell says so in the dashboard's language when that input source is selected.
-      let lang='';try{lang=readWorkspace().language;}catch{}
-      const hint=A.shellQuote(I18N.create(DICTS,lang||I18N.FALLBACK).render(A.msg('container.imeHint')));
-      fs.writeFileSync(file,`#!/bin/sh\nclear\nif defaults read com.apple.HIToolbox AppleSelectedInputSources 2>/dev/null | grep -q Vietnamese; then printf '\\033[33m%s\\033[0m\\n\\n' ${hint}; fi\nexec ${A.shellQuote(dockerPath())} exec -it ${target} sh -c 'command -v bash >/dev/null 2>&1 && exec bash || exec sh'\n`,{mode:0o700});
-      await exec('open',['-a','Terminal',file],{timeout:10000});
+      const target=DOCKER_NAME.test(c.name)?c.name:c.id;
+      if(ON_MAC){
+        // A throwaway .command file opens in Terminal without asking for permission to control another app.
+        fs.mkdirSync(TERMINAL_DIR,{recursive:true,mode:0o700});
+        for(const f of fs.readdirSync(TERMINAL_DIR)){const old=path.join(TERMINAL_DIR,f);try{if(Date.now()-fs.statSync(old).mtimeMs>600000)fs.unlinkSync(old);}catch{}}
+        const file=path.join(TERMINAL_DIR,`${target}-${crypto.randomBytes(4).toString('hex')}.command`);
+        let lang='';try{lang=readWorkspace().language;}catch{}
+        const hint=I18N.create(DICTS,lang||I18N.FALLBACK).render(A.msg('container.imeHint'));
+        fs.writeFileSync(file,PF.macShellScript({docker:dockerPath(),target,hint}),{mode:0o700});
+        await launch(PF.terminalLaunch(PLATFORM,{script:file}));
+      }else await launch(PF.terminalLaunch(PLATFORM,{target}));
     }else{
       // Only the folder Docker reports behind the container's working directory can be opened.
-      if(!c.sourceDir)return fail(res,404,A.msg('error.noSourceDir'));
+      if(!c.sourceDir)return fail(res,404,A.msg(ON_MAC?'error.noSourceDir':'error.noSourceDirPc'));
       if(!fs.existsSync(c.sourceDir)||!fs.statSync(c.sourceDir).isDirectory())return fail(res,404,A.msg('error.directoryNotFound',{path:c.sourceDir}));
-      await exec('open',['-a','Terminal',c.sourceDir],{timeout:10000});
+      await launch(PF.terminalLaunch(PLATFORM,{dir:c.sourceDir}));
     }
     return respond(res,200,{ok:true});
-  }catch(e){return fail(res,500,dockerError(e));}
+  }catch(e){if(e.code==='UNSAFE_ARG')return fail(res,400,A.msg('error.unsafePath',{path:c.sourceDir||c.name}));return fail(res,500,dockerError(e));}
 }
-// The browser cannot see absolute paths, but this local server can ask macOS for one. `choose folder`
-// runs inside osascript itself, so no permission to control another app is asked; texts go in as
-// arguments, never into the script.
+// Finder/File Explorer, Terminal or VS Code at a project folder.
+async function openIn(app,dir){
+  const l=PF.openInLaunch(PLATFORM,app,dir,process.env);
+  if(!l.candidates)return launch(l);
+  const exe=l.candidates.find(f=>fs.existsSync(f));
+  if(exe)return spawnDetached(exe,l.args);
+  try{return await launch(l.fallback);}catch{throw appError('error.vscodeMissing');}
+}
+// The browser cannot see absolute paths, but this local server can ask the system for one: `choose
+// folder` in osascript on macOS (no permission to control another app is asked), a PowerShell dialog
+// on Windows. Texts go in as arguments or environment variables, never into the script.
 async function pickFolder() {
   let lang='';try{lang=readWorkspace().language;}catch{}
   const prompt=I18N.create(DICTS,lang||I18N.FALLBACK).render(A.msg('form.pickPrompt'));
   const start=[path.join(os.homedir(),'Projects'),os.homedir()].find(d=>fs.existsSync(d));
   try{
-    const {stdout}=await exec('osascript',['-e','on run argv','-e','tell me to activate','-e','return POSIX path of (choose folder with prompt (item 1 of argv) default location (POSIX file (item 2 of argv)))','-e','end run',prompt,start],{timeout:600000});
-    const directory=stdout.trim().replace(/(.)\/+$/,'$1');
+    const {stdout}=await launch(PF.pickFolderLaunch(PLATFORM,{prompt,start}));
+    const directory=PF.pickedFolder(PLATFORM,stdout);
+    if(!directory)return {cancelled:true};
     // Suggestions only: the form still validates everything on save.
     const name=path.basename(directory).replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/^[^a-zA-Z0-9]+|-+$/g,'').slice(0,50);
     return {directory,composeFiles:COMPOSE_NAMES.filter(f=>fs.existsSync(path.join(directory,f))),name};
-  }catch(e){if(/-128|User cancel/i.test(String(e.stderr||e.message)))return {cancelled:true};throw e;}
+  }catch(e){if(PF.pickCancelled(PLATFORM,e))return {cancelled:true};throw e;}
 }
 // A project action and an action on one of its containers never run at the same time.
 const projectBusy=name=>operations.has(name)||[...operations].some(k=>k.startsWith(name+'/'));
@@ -515,7 +599,7 @@ function staticFile(req,res,urlPath){
   let content=fs.readFileSync(path.join(STATIC_DIR,target));
   // The saved language goes into the page itself, so the first frame is already in that language
   // whatever this browser stored for this address (localhost and a proxy domain do not share storage).
-  if(target==='index.html'){let lang='',theme='';try{({language:lang,theme}=readWorkspace());}catch{}content=content.toString('utf8').replace('<html lang="vi"',`<html lang="${lang||'vi'}" data-saved-lang="${lang}"${theme?` data-theme="${theme}"`:''}`);}
+  if(target==='index.html'){let lang='',theme='';try{({language:lang,theme}=readWorkspace());}catch{}content=content.toString('utf8').replace('<html lang="vi"',`<html lang="${lang||'vi'}" data-saved-lang="${lang}"${theme?` data-theme="${theme}"`:''} data-platform="${PLATFORM}"`);}
   res.writeHead(200,{'Content-Type':mime[path.extname(target)],'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'",'X-Content-Type-Options':'nosniff','Cache-Control':target.startsWith('fonts/')?'public, max-age=31536000, immutable':'no-cache'});
   res.end(content);
 }
@@ -531,6 +615,8 @@ async function route(req,res){
     const asked=new Set((url.searchParams.get('parts')||'health').split(',').filter(x=>['health','stats','disk'].includes(x)));
     try{return respond(res,200,await advisorView(asked));}catch(e){return fail(res,503,dockerError(e));}
   }
+  if (pathname==='/api/network-check' && req.method==='GET')return respond(res,200,{check:lastNetCheck});
+  if (pathname==='/api/network-check' && req.method==='POST')return respond(res,200,{check:await runNetworkCheck()});
   if (pathname==='/api/measured' && req.method==='GET'){
     try{return respond(res,200,await measuredView());}catch(e){return fail(res,503,dockerError(e));}
   }
@@ -570,7 +656,7 @@ async function route(req,res){
     if(!jobMatch[2]&&req.method==='GET')return respond(res,200,{job:publicJob(job)});
   }
   if(pathname==='/api/pick-folder' && req.method==='POST'){
-    if(process.platform!=='darwin')return fail(res,501,A.msg('error.macOnly'));
+    if(!PF.supports(PLATFORM).pickFolder)return fail(res,501,A.msg('error.macOnly'));
     try{return respond(res,200,await pickFolder());}catch(e){return fail(res,500,dockerError(e));}
   }
   if(pathname==='/api/projects' && req.method==='POST') {
@@ -624,15 +710,15 @@ async function route(req,res){
       catch(e){return fail(res,503,e.msg||dockerError(e));}
     }
     if(req.method==='POST'&&action==='open'){
-      if(process.platform!=='darwin')return fail(res,501,A.msg('error.macOnly'));
+      if(!PF.supports(PLATFORM).openIn)return fail(res,501,A.msg('error.macOnly'));
       let b;try{b=await readBody(req);}catch(e){return fail(res,400,why(e));}
-      if(!Object.hasOwn(APPS,b.app))return fail(res,400,A.msg('error.unknownApp'));
+      if(!APPS.has(b.app))return fail(res,400,A.msg('error.unknownApp'));
       // Only directories Docker or the registry already associate with this project can be opened.
       const known=[p.directory,...p.sources.map(s=>s.directory)].filter(d=>d&&path.isAbsolute(d)),dir=b.directory||known[0];
       if(!dir||!known.includes(dir))return fail(res,400,A.msg('error.directoryUnknown'));
       if(!fs.existsSync(dir)||!fs.statSync(dir).isDirectory())return fail(res,404,A.msg('error.directoryNotFound',{path:dir}));
-      try{await exec('open',APPS[b.app]?['-a',APPS[b.app],dir]:[dir],{timeout:10000});return respond(res,200,{ok:true});}
-      catch(e){return fail(res,500,dockerError(e));}
+      try{await openIn(b.app,dir);return respond(res,200,{ok:true});}
+      catch(e){return e.code==='UNSAFE_ARG'?fail(res,400,A.msg('error.unsafePath',{path:dir})):fail(res,500,e.msg||dockerError(e));}
     }
     if(req.method==='POST' && ACTIONS[action]){
       if(projectBusy(name))return fail(res,409,A.msg('error.busy'));
@@ -657,6 +743,8 @@ async function route(req,res){
 function startServer(port=PORT){
   const server=http.createServer((req,res)=>{route(req,res).catch(e=>fail(res,500,e.message));});
   server.listen(port,HOST,()=>console.log(`Docker Dev Manager: http://localhost:${server.address().port}\nConfig: ${CONFIG_FILE}`));
+  // A first network reading, so the page shows a speed on its first poll.
+  hostNetwork().catch(()=>{});
   return server;
 }
 loadMeasurements();
