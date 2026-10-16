@@ -48,7 +48,7 @@ function applyStatic(){
 function rerender(){
  if(!loaded)return;
  renderEngine();updateCounters();renderGroups();renderProjects();renderOverviewLists();renderContainers();renderSuggestions();renderStats();renderSystem();renderNetCheck();
- if(lastPorts)renderPortsData();if(lastDisk)renderDisk(lastDisk);renderAdvisorAll();renderSteps();
+ if(lastPorts)renderPortsData();if(lastDisk)renderDisk(lastDisk);renderAdvisorAll();renderSteps();renderBitbucket();
 }
 // The choice lives in the config file (survives restarts, upgrades and other URLs such as a local
 // proxy domain) and in localStorage only to paint the first frame in the right language.
@@ -764,7 +764,7 @@ function setCollapsed(section,on){
 document.querySelectorAll('section.block').forEach(sec=>{const b=sec.querySelector('.collapser');if(!b)return;if(collapsed.has(sec.id)){sec.classList.add('collapsed');b.setAttribute('aria-expanded','false');}b.addEventListener('click',()=>setCollapsed(sec,!sec.classList.contains('collapsed')));});
 
 // ---- Pages: one at a time, addressed by #name so a reload stays where you were ----
-const PAGES={overview:'nav.overview',projects:'nav.projects',containers:'nav.containers',health:'nav.health',resources:'nav.resources',ports:'nav.ports',cleanup:'nav.cleanup'};
+const PAGES={overview:'nav.overview',projects:'nav.projects',containers:'nav.containers',health:'nav.health',resources:'nav.resources',ports:'nav.ports',cleanup:'nav.cleanup',bitbucket:'nav.bitbucket'};
 let page='overview';
 function renderChrome(){
  $('crumbPage').textContent=t(PAGES[page]);document.title=`${t(PAGES[page])} · ${t('app.title')}`;
@@ -777,6 +777,7 @@ function showPage(name){
  renderChrome();window.scrollTo(0,0);
  if(page==='ports'&&token)loadPorts($('portInput').value.trim());
  if(page==='health')requestAnimationFrame(updateFades);
+ if(page==='bitbucket'&&token&&!bbMeta)loadBitbucket();
 }
 const go=name=>{if(location.hash.slice(1)===name)showPage(name);else location.hash=name;};
 window.addEventListener('hashchange',()=>showPage(location.hash.slice(1)));
@@ -913,6 +914,101 @@ function renderMemoryChart(){
  }));
 }
 
+// ---- Bitbucket SSH: Git over SSH moves to ssh.bitbucket.org ----
+// The check reads only and runs on click; each fix shows exactly what changes and backs the file up first.
+let bb=null,bbMeta=null,bbChecking=false,bbFix=null;
+const BB_TEST={ok:'bb.tOk',hostKey:'bb.tHostKey',denied:'bb.tDenied',unreachable:'bb.tUnreachable'};
+const BB_VERDICT={ok:['bb.vOk','ok'],alias:['bb.vAlias','fix'],direct:['bb.vDirect','fix']};
+async function loadBitbucket(){try{const r=await api('/api/bitbucket');bbMeta=r;bb=r.check;renderBitbucket();}catch{}}
+function bbChip(level,text){const c=el('span','bbstate '+level);c.append(el('i','',level==='ok'?'●':level==='fix'?'✕':'–'),document.createTextNode(text));return c;}
+function bbStep(n,title,state){const card=el('section','card bbstep'),head=el('div','bbstephead');head.append(el('span','bbnum',String(n)),el('h3','',title));if(state)head.append(state);card.append(head);return card;}
+function renderBitbucket(){
+ const body=$('bbBody');if(!body)return;
+ const b=$('bbCheck');b.disabled=bbChecking;b.replaceChildren(icon('scan-search'),document.createTextNode(t(bbChecking?'bb.checking':bb?'bb.recheck':'bb.check')));
+ if(bbMeta){
+  const date=new Date(bbMeta.deadline+'T00:00:00Z').toLocaleDateString(I.lang,{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}),days=Math.ceil((Date.parse(bbMeta.deadline+'T00:00:00Z')-Date.now())/86400000);
+  $('bbLead').textContent=days>0?t('bb.lead',{date,count:days}):t('bb.leadAfter',{date});
+ }
+ if(bbChecking&&!bb){const c=el('div','card bbstep');c.append(el('p','smalltext',t('bb.scanning')),el('div','skel line'),el('div','skel line'));return body.replaceChildren(c);}
+ if(!bb){
+  const c=el('section','card bbstep'),list=el('ul','bbintro');c.append(el('h3','',t('bb.introTitle')));
+  for(const k of ['bb.intro1','bb.intro2','bb.intro3','bb.intro4']){const li=el('li');renderRich(li,t(k));list.append(li);}
+  c.append(list,el('p','smalltext',t('bb.introNote')));return body.replaceChildren(c);
+ }
+ const summary=el('div','bbsummary '+(bb.ready?'ok':'fix'));
+ summary.append(icon(bb.ready?'circle-check':'triangle-alert'),el('strong','',bb.ready?t('bb.ready'):t('bb.notReady',{count:bb.fixes})),
+  el('span','smalltext',t('bb.checkedLine',{time:clock(bb.checkedAt),repos:bb.repos,roots:bb.roots.map(shortPath).join(', ')})));
+ // [1] Host key
+ const s1=bbStep(1,t('bb.step1'),bbChip(bb.hostKey?'ok':'fix',t(bb.hostKey?'bb.vOk':'bb.vMissing')));
+ const p1=el('p');renderRich(p1,t(bb.hostKey?'bb.keyOk':'bb.keyMissing',{file:shortPath(bb.keyFile)}));s1.append(p1);
+ if(!bb.hostKey)s1.append(button(t('bb.addKey'),'primary',()=>reviewBitbucket('hostKey'),bbChecking,'','plus'));
+ // [2] Repositories reaching Bitbucket over SSH
+ const fixHosts=bb.hosts.filter(h=>h.verdict!=='ok'),s2=bbStep(2,t('bb.step2'),bb.hosts.length?bbChip(fixHosts.length?'fix':'ok',fixHosts.length?t('bb.notReady',{count:fixHosts.length}):t('bb.vOk')):bbChip('ok',t('bb.vOk')));
+ if(!bb.hosts.length)s2.append(el('p','',t('bb.noSsh')));
+ else{
+  const wrap=el('div','tablewrap'),table=el('table'),head=el('tr'),tbody=el('tbody');
+  for(const k of ['bb.colHost','bb.colResolves','bb.colRemotes','col.state'])head.append(el('th','',t(k)));
+  for(const h of bb.hosts){
+   const row=el('tr'),[key,level]=BB_VERDICT[h.verdict],repos=el('details','bbrepos'),sum=el('summary','',t('bb.remoteCount',{count:h.remotes.length})),list=el('ul');
+   for(const r of h.remotes){const li=el('li');li.append(el('strong','',shortPath(r.repo)),el('code','',`${r.remote} ${r.url}`));list.append(li);}
+   repos.append(sum,list);const rc=el('td');rc.append(repos);const sc=el('td');sc.append(bbChip(level,t(key)));
+   row.append(el('td','mono',h.host),el('td','mono',h.resolved),rc,sc);tbody.append(row);
+  }
+  table.append(el('thead'),tbody);table.firstChild.append(head);wrap.append(table);s2.append(wrap);
+  const acts=el('div','bbactions');
+  if(bb.hosts.some(h=>h.verdict==='alias'))acts.append(button(t('bb.fixConfig'),'primary',()=>reviewBitbucket('sshConfig'),bbChecking,'','pencil'));
+  const direct=bb.hosts.filter(h=>h.verdict==='direct').reduce((n,h)=>n+h.remotes.length,0);
+  if(direct)acts.append(button(t('bb.fixRemotes',{count:direct}),'primary',()=>reviewBitbucket('remotes'),bbChecking,'','pencil'));
+  if(acts.childNodes.length)s2.append(acts);
+ }
+ if(bb.https)s2.append(el('p','smalltext',t('bb.https',{count:bb.https})));
+ const steps=[summary,s1,s2];
+ // [3] A real connection through the new hostname
+ if(bb.hosts.length){
+  const bad=bb.hosts.filter(h=>h.test!=='ok').length,s3=bbStep(3,t('bb.step3'),bbChip(bad?'fix':'ok',bad?t('bb.notReady',{count:bad}):t('bb.vOk'))),list=el('ul','bbtests');
+  for(const h of bb.hosts){const li=el('li');li.append(el('span','mono',h.host),bbChip(h.test==='ok'?'ok':'fix',t(BB_TEST[h.test]||'bb.tUnreachable')));list.append(li);}
+  s3.append(list);steps.push(s3);
+ }
+ // [4] Hard-coded old host: shown, never edited
+ const found=bb.hardcoded.length||bb.crontab,s4=bbStep(bb.hosts.length?4:3,t('bb.step4'),bbChip(found?'info':'ok',found?t('bb.reviewHand'):t('bb.noneFound')));
+ if(found){const list=el('ul','bbfiles');for(const f of bb.hardcoded)list.append(el('li','mono',shortPath(f)));if(bb.crontab){const li=el('li');renderRich(li,t('bb.crontab'));list.append(li);}s4.append(list);}
+ steps.push(s4);body.replaceChildren(...steps);
+}
+async function checkBitbucket(){
+ if(bbChecking)return;bbChecking=true;renderBitbucket();
+ try{bb=(await api('/api/bitbucket/check','POST',{})).check;}catch(e){toast(e.message);}
+ finally{bbChecking=false;renderBitbucket();}
+}
+// The dialog shows the exact change the server would make; Apply asks it to do just that.
+async function reviewBitbucket(action){
+ let plan;try{plan=(await api('/api/bitbucket/fix','POST',{action})).result;}catch(e){return toast(e.message);}
+ bbFix=action;const body=$('bbDialogBody');body.replaceChildren();let canApply=true;
+ if(action==='hostKey'){
+  $('bbDialogTitle').textContent=t('bb.reviewKey');renderRich($('bbDialogText'),t('bb.reviewKeyText',{file:shortPath(plan.file)}));
+  const tb=el('table'),rows=el('tbody');for(const k of plan.keys){const tr=el('tr');tr.append(el('td','mono',k.type),el('td','mono',k.fingerprint));rows.append(tr);}tb.append(rows);body.append(tb);
+ }else if(action==='sshConfig'){
+  $('bbDialogTitle').textContent=t('bb.reviewConfig');renderRich($('bbDialogText'),t('bb.reviewConfigText',{file:shortPath(plan.file)}));
+  if(!plan.changes.length){canApply=false;const p=el('p','alert');renderRich(p,t('bb.noConfigChange',{file:shortPath(plan.file)}));body.append(p);}
+  for(const c of plan.changes){const d=el('div','bbdiff');d.append(el('span','smalltext',t('bb.lineChange',{line:c.line})),el('code','del',c.before.trim()),el('code','add',c.after.trim()));body.append(d);}
+ }else{
+  $('bbDialogTitle').textContent=t('bb.reviewRemotes');renderRich($('bbDialogText'),t('bb.reviewRemotesText'));
+  for(const r of plan.items){const d=el('div','bbdiff');d.append(el('strong','',`${shortPath(r.repo)} · ${r.remote}`),el('code','del',r.url),el('code','add',r.next));body.append(d);}
+ }
+ if(plan.backup){const p=el('p','smalltext');renderRich(p,t('bb.backup',{file:shortPath(plan.backup)}));body.append(p);}
+ $('bbApply').disabled=!canApply;$('bbDialog').showModal();
+}
+$('bbApply').onclick=async()=>{
+ const action=bbFix;$('bbApply').disabled=true;
+ try{
+  const r=(await api('/api/bitbucket/fix','POST',{action,apply:true})).result;$('bbDialog').close();
+  const failed=(r.items||[]).filter(i=>!i.ok);
+  toast(failed.length?failed.map(i=>t('bb.remoteFailed',{repo:shortPath(i.repo),error:i.error})).join(' · '):t(r.skipped?'bb.alreadyDone':'bb.applied'));
+  await checkBitbucket();
+ }catch(e){toast(e.message);$('bbApply').disabled=false;}
+};
+for(const id of ['bbDialogClose','bbDialogCancel'])$(id).onclick=()=>$('bbDialog').close();
+$('bbCheck').onclick=checkBitbucket;
+
 // ---- Containers: every container of every project in one table, with the same controls as the cards ----
 let cfilter='all';
 const PROBLEM_STATES=new Set(['failed','restarting','unhealthy']);
@@ -961,6 +1057,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now(
   else if(!workspace.language&&I18N.valid(local))await setLanguage(I.lang,true);
   await refresh();renderAdvisorAll();loadHost();loadPorts();restoreMeasurements();
   api('/api/network-check').then(r=>{netCheck=r.check;renderNetCheck();},()=>{});
+  if(page==='bitbucket')loadBitbucket();
   setInterval(()=>{if(!document.hidden){refresh();loadHost();}},15000);
  }catch(e){alertMessage(e.message);}
 })();

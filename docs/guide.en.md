@@ -21,6 +21,7 @@ Docker Dev Manager is a local web page for the Docker Compose projects on your c
 11. [Import a project, Up and Down](#11-import-a-project-up-and-down)
 12. [Language](#12-language)
 13. [Questions and problems](#13-questions-and-problems)
+14. [Bitbucket: move Git over SSH to ssh.bitbucket.org](#14-bitbucket-move-git-over-ssh-to-sshbitbucketorg)
 
 ## 1. Install and open
 
@@ -258,3 +259,16 @@ Use **Tiếng Việt / English** in the header. The page switches instantly and 
 | `N sources` badge | The project name was started from different folders or Compose file sets. Details lists each source, and Stop/Start act on all of them. |
 | Port 4173 already in use | Run `DEV_MANAGER_PORT=4174 npm start` (PowerShell: `$env:DEV_MANAGER_PORT=4174; npm start`). |
 | No CPU/RAM figures | They are measured on demand: click **Measure** on the *Container RAM* card. If they stay empty, run `docker stats --no-stream` in a terminal to check Docker. |
+
+## 14. Bitbucket: move Git over SSH to ssh.bitbucket.org
+
+From 12 November 2026, `bitbucket.org` serves HTTPS only: every clone, pull, fetch and push over SSH must go through `ssh.bitbucket.org`. Open **Bitbucket SSH** (under *Maintain*) and click **Check this machine**. The check changes nothing; in a few seconds it shows four steps, as the runbook does:
+
+1. **Host key**: whether `~/.ssh/known_hosts` already trusts `ssh.bitbucket.org`. **Add the host key** downloads Bitbucket's keys over HTTPS and adds them only when all three fingerprints match the ones Bitbucket publishes.
+2. **Repositories**: every repository in your home folder that reaches Bitbucket over SSH, grouped by SSH host. An alias (for example `bitbucket-work`) is fixed once in `~/.ssh/config` with **Update ~/.ssh/config**: only its `HostName` line changes, so no repository needs touching. A remote that names `git@bitbucket.org` itself is moved with **Update remotes** (`git remote set-url`). HTTPS remotes are not affected.
+3. **Connection test**: a real SSH login to `ssh.bitbucket.org` with each alias's own key, so you know it works before the deadline. *Key refused* usually means a key with a passphrase not added with `ssh-add`; *Could not connect* means DNS or a firewall on port 22.
+4. **Scripts and crontab** that still name `git@bitbucket.org`: listed for you to edit by hand.
+
+Every fix opens a preview of the exact change first, and the file is backed up next to the original (`config.bak-…`, `known_hosts.bak-…`, `.git/config.bak-…`). After a fix the check runs again.
+
+On a deploy server, where the dashboard does not run, use **Download the script** and run `bash bitbucket-ssh-check.sh` as every user that runs git. It only reads, and ends with READY or NOT YET.

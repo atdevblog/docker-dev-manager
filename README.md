@@ -57,6 +57,8 @@ Need another port? Run `DEV_MANAGER_PORT=4174 npm start` (PowerShell: `$env:DEV_
 |---|---|---|
 | `DEV_MANAGER_PORT` | `4173` | Port of the dashboard (always bound to `127.0.0.1`) |
 | `DEV_MANAGER_CONFIG_DIR` | `~/.config/docker-dev-manager` | Where settings and the last measurements are saved |
+| `DEV_MANAGER_SCAN_ROOTS` | home folder (plus `/var/www`, `/opt`, `/srv` when they exist) | Folders the Bitbucket check scans for repositories, separated by `:` (`;` on Windows) |
+| `DEV_MANAGER_SSH_DIR` | `~/.ssh` | SSH folder the Bitbucket check reads and fixes |
 | `DEV_MANAGER_IDLE_MINUTES` | `15` | Minimum gap between two RAM/CPU measurements before a quiet project (no network traffic, CPU < 1%) counts as idle |
 
 </details>
@@ -71,7 +73,7 @@ The **[user guide](docs/guide.en.md)** walks through every screen, step by step:
 | [The screen at a glance](docs/guide.en.md#2-the-screen-at-a-glance) | [One container at a time](docs/guide.en.md#one-container-at-a-time) | [Free up memory](docs/guide.en.md#8-free-up-memory) |
 | [Import a project, Up and Down](docs/guide.en.md#11-import-a-project-up-and-down) | [Why is a project not running?](docs/guide.en.md#5-why-is-a-project-not-running) | [Pick free ports](docs/guide.en.md#9-pick-free-ports) |
 | [Language](docs/guide.en.md#12-language) | [Read logs](docs/guide.en.md#6-read-logs) | [Clean disk space safely](docs/guide.en.md#10-clean-disk-space-safely) |
-| [Questions and problems](docs/guide.en.md#13-questions-and-problems) | [Groups from Docker](docs/guide.en.md#7-groups-from-docker) | |
+| [Questions and problems](docs/guide.en.md#13-questions-and-problems) | [Groups from Docker](docs/guide.en.md#7-groups-from-docker) | [Bitbucket: move Git over SSH](docs/guide.en.md#14-bitbucket-move-git-over-ssh-to-sshbitbucketorg) |
 
 ## What's inside
 
@@ -83,6 +85,7 @@ The **[user guide](docs/guide.en.md)** walks through every screen, step by step:
 | 🧠 **Free up memory** | Projects sorted by RAM against the Docker VM limit, idle ones spotted between two measurements, and a review of what would break before anything stops. |
 | 💾 **Disk cleanup** | Docker's disk use sorted into *safe to clean*, *review first* and *may hold data*, with commands to copy. It never deletes anything itself. |
 | 🎛️ **Control at every level** | Start, stop or restart a whole project, a group of projects that share a network (in dependency order) or a single container, like Docker Desktop. Open a shell inside a container, or a Terminal at its folder. |
+| 🔑 **Bitbucket SSH move** | Bitbucket moves Git over SSH to `ssh.bitbucket.org` on 12 November 2026. One check finds every repository and `~/.ssh` alias still on `bitbucket.org` and tests your keys against the new host; then it adds the host key, updates the aliases and the remotes, each after you review the change and with a backup. A script runs the same check on servers. |
 | 🩺 **Health advisor** | A score made only of explained deductions, and a to-do list ranked **Urgent → Optional** with the RAM or disk each step frees and its risk. |
 
 ## Built for everyday use
@@ -97,7 +100,7 @@ It complements Docker Desktop rather than replacing it.
 
 ## Security
 
-This is a **single-user local tool**. It listens on `127.0.0.1` only, rejects requests whose `Host` is not `localhost`, and requires a per-session token and a localhost `Origin` for every change. Commands run with your own Docker permissions. Its only connection to the Internet is the network check in the sidebar, and only when you click it: it opens and closes a connection to `registry-1.docker.io` and `1.1.1.1` to time it; nothing is sent or downloaded. Do not expose it on a network or through a tunnel.
+This is a **single-user local tool**. It listens on `127.0.0.1` only, rejects requests whose `Host` is not `localhost`, and requires a per-session token and a localhost `Origin` for every change. Commands run with your own Docker permissions. It connects to the Internet only when you click: the network check opens and closes a connection to `registry-1.docker.io` and `1.1.1.1` to time it (nothing is sent or downloaded), and the Bitbucket check downloads Bitbucket's public host keys from `bitbucket.org` over HTTPS and tries an SSH login to `ssh.bitbucket.org` with your own keys. Do not expose it on a network or through a tunnel.
 
 <details>
 <summary>Optional: open it with a local domain through a reverse proxy</summary>
@@ -145,6 +148,7 @@ Writes are atomic with mode `0600`, and keys are preserved. A corrupt file is ne
 server.js            HTTP server, Docker CLI calls, preflight checks, background jobs, saved measurements
 lib/analysis.js      pure rules: grouping, problems, dependencies, ports, resources, disk, container preflight
 lib/advisor.js       health score, waste and ranked recommendations
+lib/bitbucket.js     Bitbucket SSH move: remote URLs, ~/.ssh/config, host key fingerprints
 lib/platform.js      what differs per system: terminals, folder picker, Finder/File Explorer, paths, commands to copy
 public/              page (index.html, app.js, style.css), i18n.js, locales/, icons, fonts/
 assets/icons/        icon sources; build.sh regenerates favicon.ico and apple-touch-icon.png

@@ -21,6 +21,7 @@ Docker Dev Manager là một trang web chạy trên máy của bạn, dùng đ�
 11. [Import dự án, Up và Down](#11-import-dự-án-up-và-down)
 12. [Ngôn ngữ](#12-ngôn-ngữ)
 13. [Câu hỏi và sự cố thường gặp](#13-câu-hỏi-và-sự-cố-thường-gặp)
+14. [Bitbucket: chuyển Git qua SSH sang ssh.bitbucket.org](#14-bitbucket-chuyển-git-qua-ssh-sang-sshbitbucketorg)
 
 ## 1. Cài đặt và mở
 
@@ -258,3 +259,16 @@ Dùng nút **Tiếng Việt / English** trên header. Trang chuyển ngay và gh
 | Badge `N nguồn` | Tên dự án được chạy từ các thư mục hoặc bộ file Compose khác nhau. Chi tiết liệt kê từng nguồn; Khởi động/Dừng tác động lên tất cả. |
 | Port 4173 đã bị dùng | Chạy `DEV_MANAGER_PORT=4174 npm start` (PowerShell: `$env:DEV_MANAGER_PORT=4174; npm start`). |
 | Không có số liệu CPU/RAM | Số liệu chỉ đo khi bạn yêu cầu: bấm **Đo** trên thẻ *RAM container*. Nếu vẫn trống, chạy `docker stats --no-stream` trong terminal để kiểm tra Docker. |
+
+## 14. Bitbucket: chuyển Git qua SSH sang ssh.bitbucket.org
+
+Từ 12/11/2026, `bitbucket.org` chỉ còn phục vụ HTTPS: mọi lệnh clone, pull, fetch, push qua SSH phải đi qua `ssh.bitbucket.org`. Mở **Bitbucket SSH** (nhóm *Bảo trì*) và bấm **Kiểm tra máy này**. Phần kiểm tra không sửa gì; sau vài giây trang hiện 4 mục giống runbook:
+
+1. **Host key**: `~/.ssh/known_hosts` đã tin `ssh.bitbucket.org` chưa. Nút **Thêm host key** tải key của Bitbucket qua HTTPS và chỉ ghi khi cả 3 fingerprint khớp với bảng Bitbucket công bố.
+2. **Repo**: mọi repo trong thư mục cá nhân đi tới Bitbucket qua SSH, gom theo host SSH. Alias (ví dụ `bitbucket-work`) được sửa một lần trong `~/.ssh/config` bằng nút **Sửa ~/.ssh/config**: chỉ dòng `HostName` thay đổi, không phải đụng vào repo nào. Remote ghi thẳng `git@bitbucket.org` được chuyển bằng nút **Đổi remote** (`git remote set-url`). Remote HTTPS không bị ảnh hưởng.
+3. **Thử kết nối**: đăng nhập SSH thật tới `ssh.bitbucket.org` bằng đúng key của từng alias, để biết chắc mọi thứ chạy trước hạn. *Key bị từ chối* thường do key có passphrase chưa `ssh-add`; *Không kết nối được* là do DNS hoặc tường lửa chặn cổng 22.
+4. **Script và crontab** còn ghi `git@bitbucket.org`: được liệt kê để bạn tự sửa.
+
+Mỗi bản sửa đều mở phần xem trước đúng thay đổi sẽ làm, và file được sao lưu ngay cạnh bản gốc (`config.bak-…`, `known_hosts.bak-…`, `.git/config.bak-…`). Sửa xong, trang tự kiểm tra lại.
+
+Trên máy chủ deploy, nơi không chạy dashboard, dùng nút **Tải script** rồi chạy `bash bitbucket-ssh-check.sh` bằng mỗi user có chạy git. Script chỉ đọc, rồi kết luận SẴN SÀNG hoặc CHƯA.

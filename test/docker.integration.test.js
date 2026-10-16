@@ -8,14 +8,14 @@ const CONFIG_DIR=fs.mkdtempSync(path.join(os.tmpdir(),'ddm-it-config-'));
 process.env.DEV_MANAGER_CONFIG_DIR=CONFIG_DIR;
 const S=require('../server');
 const I18N=require('../public/i18n.js');const EN=I18N.create({vi:require('../public/locales/vi.json'),en:require('../public/locales/en.json')},'en'),text=m=>EN.render(m);
-const R=crypto.randomBytes(3).toString('hex'),FLEET=`ddmit${R}-fleet`,APP=`ddmit${R}-app`,CRASH=`ddmit${R}-crash`,BROKEN=`ddmit${R}-broken`,HOLDER=`ddmit${R}-holder`,NET=`ddmit${R}-shared`;
+const R=crypto.randomBytes(3).toString('hex'),STACK=`ddmit${R}-stack`,APP=`ddmit${R}-app`,CRASH=`ddmit${R}-crash`,BROKEN=`ddmit${R}-broken`,HOLDER=`ddmit${R}-holder`,NET=`ddmit${R}-shared`;
 // nginx:alpine declares no VOLUME, so the throwaway containers leave no anonymous volumes behind.
 const PORT=47391,IMAGE='nginx:alpine',ROOT=fs.mkdtempSync(path.join(os.tmpdir(),'ddm-it-'));
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const dockerCli=(args,cwd)=>exec('docker',args,{cwd,timeout:120000});
 const svc=(name,extra='')=>`  ${name}:\n    image: ${IMAGE}\n    command: ["sh","-c","echo ${name} up; exec sleep 3600"]\n${extra}`;
 const stacks={
- [FLEET]:`services:\n${svc('cache','    networks: [shared]\n')}networks:\n  shared:\n    name: ${NET}\n`,
+ [STACK]:`services:\n${svc('cache','    networks: [shared]\n')}networks:\n  shared:\n    name: ${NET}\n`,
  [APP]:`services:\n${svc('db')}${svc('app',`    depends_on: [db]\n    ports: ["127.0.0.1:${PORT}:6379"]\n    networks: [default, shared]\n`)}networks:\n  shared:\n    external: true\n    name: ${NET}\n`,
  [CRASH]:`services:\n  loop:\n    image: ${IMAGE}\n    command: ["sh","-c","exit 3"]\n    restart: always\n  oneshot:\n    image: ${IMAGE}\n    command: ["sh","-c","exit 2"]\n${svc('keep')}`,
  [BROKEN]:'services: [\n'};
@@ -26,7 +26,7 @@ test('real Docker: discovery, Docker-derived groups, preflight, label-mode actio
  const server=S.startServer(0);await new Promise(r=>server.once('listening',r));
  const base=`http://127.0.0.1:${server.address().port}`;
  try{
-  await compose(FLEET,['up','-d']);await compose(APP,['up','-d']);await compose(CRASH,['up','-d']);
+  await compose(STACK,['up','-d']);await compose(APP,['up','-d']);await compose(CRASH,['up','-d']);
   const {token}=await (await fetch(base+'/api/session')).json();
   const get=async url=>{const r=await fetch(base+url);return {status:r.status,body:await r.json()};};
   const post=async(url,body={})=>{const r=await fetch(base+url,{method:'POST',headers:{'Content-Type':'application/json','X-Dev-Manager-Token':token},body:JSON.stringify(body)});return {status:r.status,body:await r.json()};};
@@ -35,16 +35,16 @@ test('real Docker: discovery, Docker-derived groups, preflight, label-mode actio
   const waitJob=async id=>{for(let i=0;i<120;i++){const {job}=(await get('/api/jobs/'+id)).body;if(job.state!=='running')return job;await sleep(500);}throw new Error('job timeout');};
 
   await t.test('discovers projects, counts and cross-project network dependency',async()=>{
-   const app=await project(APP),fleet=await project(FLEET);
+   const app=await project(APP),stack=await project(STACK);
    assert.equal(app.managed,false);assert.equal(app.importable,true);assert.equal(app.running,2);assert.equal(app.total,2);assert.equal(app.status,'running');
-   assert.deepEqual(app.dependsOn.map(d=>[d.project,d.running]),[[FLEET,true]]);assert.deepEqual(fleet.usedBy.map(u=>u.project),[APP]);
-   const groups=(await get('/api/state')).body.groups;assert.deepEqual(groups.find(g=>g.name===APP),{name:APP,projects:[FLEET,APP]});
+   assert.deepEqual(app.dependsOn.map(d=>[d.project,d.running]),[[STACK,true]]);assert.deepEqual(stack.usedBy.map(u=>u.project),[APP]);
+   const groups=(await get('/api/state')).body.groups;assert.deepEqual(groups.find(g=>g.name===APP),{name:APP,projects:[STACK,APP]});
   });
   await t.test('stopping a provider warns about its running dependents and offers them unticked',async()=>{
-   const p=await plan('stop',[FLEET]);
+   const p=await plan('stop',[STACK]);
    assert.match(text(p.items[0].warnings),new RegExp(APP));assert.equal(p.items[0].protect,true);assert.equal(p.items[1].project,APP);assert.equal(p.items[1].related,true);
-   const group=await plan('stop',[FLEET,APP]);assert.equal(group.items.find(i=>i.project===FLEET).protect,false,'stopping the whole group may stop its provider');
-   assert.deepEqual(p.order,[APP,FLEET]);
+   const group=await plan('stop',[STACK,APP]);assert.equal(group.items.find(i=>i.project===STACK).protect,false,'stopping the whole group may stop its provider');
+   assert.deepEqual(p.order,[APP,STACK]);
   });
   await t.test('stop works on a discovered project without importing it (label mode)',async()=>{
    const r=await post(`/api/projects/${APP}/stop`);assert.equal(r.status,200,r.body.error);
@@ -64,9 +64,9 @@ test('real Docker: discovery, Docker-derived groups, preflight, label-mode actio
    finally{await new Promise(r=>listener.close(r));}
   });
   await t.test('group start runs providers first and skips what already runs',async()=>{
-   const created=await post('/api/batch',{action:'start',projects:[APP,FLEET]});assert.equal(created.status,202);
+   const created=await post('/api/batch',{action:'start',projects:[APP,STACK]});assert.equal(created.status,202);
    const job=await waitJob(created.body.job.id);
-   assert.deepEqual(job.items.map(i=>[i.project,i.status]),[[FLEET,'skipped'],[APP,'done']]);
+   assert.deepEqual(job.items.map(i=>[i.project,i.status]),[[STACK,'skipped'],[APP,'done']]);
    assert.equal((await project(APP)).running,2);
   });
   await t.test('logs per service through label mode',async()=>{
@@ -92,11 +92,11 @@ test('real Docker: discovery, Docker-derived groups, preflight, label-mode actio
    assert.equal((await post(`/api/projects/${APP}/containers/000000000000/stop`)).status,404);
   });
   await t.test('cancel leaves the remaining projects untouched',async()=>{
-   const created=await post('/api/batch',{action:'stop',projects:[FLEET,APP]});
+   const created=await post('/api/batch',{action:'stop',projects:[STACK,APP]});
    await post(`/api/jobs/${created.body.job.id}/cancel`);
    const job=await waitJob(created.body.job.id);
-   assert.equal(job.state,'cancelled');assert.deepEqual(job.items.map(i=>i.project),[APP,FLEET]);assert.equal(job.items[1].status,'cancelled');
-   assert.equal((await project(FLEET)).running,1);
+   assert.equal(job.state,'cancelled');assert.deepEqual(job.items.map(i=>i.project),[APP,STACK]);assert.equal(job.items[1].status,'cancelled');
+   assert.equal((await project(STACK)).running,1);
   });
   await t.test('crash loop and non-zero exit are reported',async()=>{
    for(let i=0;i<60;i++){const {stdout}=await dockerCli(['inspect','-f','{{.RestartCount}}',`${CRASH}-loop-1`]);if(Number(stdout)>=5)break;await sleep(500);}
@@ -127,7 +127,7 @@ test('real Docker: discovery, Docker-derived groups, preflight, label-mode actio
   await new Promise(r=>server.close(r));
   // -v: the test image declares VOLUME /data, so every throwaway container also left an anonymous volume.
   await dockerCli(['rm','-f','-v',HOLDER]).catch(()=>{});
-  for(const name of [APP,CRASH,FLEET])await compose(name,['down','-v','--timeout','2']).catch(()=>{});
+  for(const name of [APP,CRASH,STACK])await compose(name,['down','-v','--timeout','2']).catch(()=>{});
   fs.rmSync(ROOT,{recursive:true,force:true});fs.rmSync(CONFIG_DIR,{recursive:true,force:true});
  }
 });

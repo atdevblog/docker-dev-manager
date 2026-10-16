@@ -63,10 +63,10 @@ test('advise: stop idle projects with providers that serve only them; keep share
  assert.deepEqual(r.waste.filter(w=>w.kind==='idle').map(w=>w.memBytes).sort((a,b)=>a-b),[200*1024**2,300*1024**2]);
 });
 test('advise: a crash loop next to stopped services suggests starting them first; partial-down is not repeated',()=>{
- const ps=projects([{name:'api',id:'apix',project:'erp',restarts:40},{name:'db',project:'erp',state:'exited',exit:255}]);
- const r=V.advise({docker:ON,projects:ps,containers:[{id:id('apix'),project:'erp',service:'api',memBytes:1,cpuPercent:7.5}]});
+ const ps=projects([{name:'api',id:'apix',project:'billing',restarts:40},{name:'db',project:'billing',state:'exited',exit:255}]);
+ const r=V.advise({docker:ON,projects:ps,containers:[{id:id('apix'),project:'billing',service:'api',memBytes:1,cpuPercent:7.5}]});
  assert.deepEqual(r.actions.map(a=>a.kind),['startStopped'],'one action: start what it waits for, with the log at hand');
- assert.deepEqual(r.actions[0].action,{type:'start',projects:['erp']});assert.deepEqual(r.actions[0].secondary,{type:'logs',project:'erp',service:'api'});
+ assert.deepEqual(r.actions[0].action,{type:'start',projects:['billing']});assert.deepEqual(r.actions[0].secondary,{type:'logs',project:'billing',service:'api'});
  assert.equal(r.waste.find(w=>w.kind==='churn').cpuPercent,7.5);
 });
 test('advise: under memory pressure the largest stoppable projects are suggested, as needing review',()=>{
@@ -89,8 +89,8 @@ test('advise: disk reclaim is classified by safety and never offers a volume com
 });
 test('actions are ranked by severity: broken now, then memory pressure relief, then past problems, then disk',()=>{
  // The situation from a real report: memory pressure warning, an OOM in a past run, a large stoppable project, old build cache.
- const ps=projects([{name:'clam',project:'av',state:'exited',oom:true,policy:'unless-stopped',mem:256*1024**2},{name:'web',id:'shopweb',project:'shop'},{name:'api',id:'erpapi',project:'erp',restarts:12}]);
- const containers=[{id:id('shopweb'),project:'shop',service:'web',memBytes:3.6*1024**3,cpuPercent:4},{id:id('erpapi'),project:'erp',service:'api',memBytes:1,cpuPercent:9}];
+ const ps=projects([{name:'clam',project:'av',state:'exited',oom:true,policy:'unless-stopped',mem:256*1024**2},{name:'web',id:'shopweb',project:'shop'},{name:'api',id:'erpapi',project:'billing',restarts:12}]);
+ const containers=[{id:id('shopweb'),project:'shop',service:'web',memBytes:3.6*1024**3,cpuPercent:4},{id:id('erpapi'),project:'billing',service:'api',memBytes:1,cpuPercent:9}];
  const disk=A.diskReport({BuildCache:[{InUse:'false',Shared:'false',Size:'16GB',LastUsedAt:'2020-01-01 00:00:00 +0000 UTC'}],Images:[],Containers:[],Volumes:[]});
  const activity=new Map(ps.map(p=>[p.name,{known:false,idle:false,observedMinutes:3}]));
  const r=V.advise({docker:ON,projects:ps,containers,host:{memory:{pressure:'warning'}},vm:{memTotal:8*1024**3},disk,activity});
@@ -101,8 +101,8 @@ test('actions are ranked by severity: broken now, then memory pressure relief, t
  assert.deepEqual(r.waste.map(w=>w.kind),['churn','disk']);
 });
 test('each box shows only what its own measurement found',()=>{
- const ps=projects([{name:'clam',project:'av',state:'exited',oom:true,policy:'unless-stopped',mem:256*1024**2},{name:'web',id:'shopweb',project:'shop'},{name:'api',id:'erpapi',project:'erp',restarts:12}]);
- const containers=[{id:id('shopweb'),project:'shop',service:'web',memBytes:3.6*1024**3,cpuPercent:4},{id:id('erpapi'),project:'erp',service:'api',memBytes:1,cpuPercent:9}];
+ const ps=projects([{name:'clam',project:'av',state:'exited',oom:true,policy:'unless-stopped',mem:256*1024**2},{name:'web',id:'shopweb',project:'shop'},{name:'api',id:'erpapi',project:'billing',restarts:12}]);
+ const containers=[{id:id('shopweb'),project:'shop',service:'web',memBytes:3.6*1024**3,cpuPercent:4},{id:id('erpapi'),project:'billing',service:'api',memBytes:1,cpuPercent:9}];
  const disk=A.diskReport({BuildCache:[{InUse:'false',Shared:'false',Size:'16GB',LastUsedAt:'2020-01-01 00:00:00 +0000 UTC'}],Images:[],Containers:[],Volumes:[]});
  const base={docker:ON,projects:ps,containers,host:{memory:{pressure:'warning'}},vm:{memTotal:8*1024**3},disk,activity:new Map()};
  const only=parts=>V.advise({...base,parts:{health:false,stats:false,disk:false,...parts}});

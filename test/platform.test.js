@@ -29,9 +29,9 @@ test('macOS and Linux: commands to copy run label mode from /tmp, exactly as bef
   assert.deepEqual(A.cliCommands({name:'shop',managed:false,sources:[{directory:'/w/My Shop',files:['/w/My Shop/compose.yaml']}]},platform).map(c=>c.command),[
    'cd /tmp && docker compose -p shop ps -a','cd /tmp && docker compose -p shop logs -f --tail 200','cd /tmp && docker compose -p shop start','cd /tmp && docker compose -p shop stop','cd /tmp && docker compose -p shop restart',
    "cd '/w/My Shop' && docker compose -p shop -f '/w/My Shop/compose.yaml' up -d"]);
-  assert.deepEqual(A.cliCommands({name:'erp',managed:true,directory:'/w/erp',composeFile:'docker-compose.yml',sources:[]},platform).map(c=>c.command),[
-   'cd /w/erp && docker compose -p erp -f docker-compose.yml ps -a','cd /w/erp && docker compose -p erp -f docker-compose.yml logs -f --tail 200','cd /tmp && docker compose -p erp start','cd /tmp && docker compose -p erp stop',
-   'cd /w/erp && docker compose -p erp -f docker-compose.yml up -d','cd /w/erp && docker compose -p erp -f docker-compose.yml down']);
+  assert.deepEqual(A.cliCommands({name:'billing',managed:true,directory:'/w/billing',composeFile:'docker-compose.yml',sources:[]},platform).map(c=>c.command),[
+   'cd /w/billing && docker compose -p billing -f docker-compose.yml ps -a','cd /w/billing && docker compose -p billing -f docker-compose.yml logs -f --tail 200','cd /tmp && docker compose -p billing start','cd /tmp && docker compose -p billing stop',
+   'cd /w/billing && docker compose -p billing -f docker-compose.yml up -d','cd /w/billing && docker compose -p billing -f docker-compose.yml down']);
  }
 });
 test('macOS and Linux: paths reported by Docker are used as they are',()=>{
@@ -88,7 +88,7 @@ test('Windows: commands to copy are PowerShell, from the temp folder',()=>{
  assert.deepEqual(A.cliCommands({name:'shop',managed:false,sources:[{directory:'C:\\w\\My Shop',files:['C:\\w\\My Shop\\compose.yaml']}]},'win32').map(c=>c.command),[
   'cd $env:TEMP; docker compose -p shop ps -a','cd $env:TEMP; docker compose -p shop logs -f --tail 200','cd $env:TEMP; docker compose -p shop start','cd $env:TEMP; docker compose -p shop stop','cd $env:TEMP; docker compose -p shop restart',
   "cd 'C:\\w\\My Shop'; docker compose -p shop -f 'C:\\w\\My Shop\\compose.yaml' up -d"]);
- assert.equal(A.cliCommands({name:'erp',managed:true,directory:"C:\\Bob's\\erp",composeFile:'docker-compose.yml',sources:[]},'win32')[0].command,"cd 'C:\\Bob''s\\erp'; docker compose -p erp -f docker-compose.yml ps -a");
+ assert.equal(A.cliCommands({name:'billing',managed:true,directory:"C:\\Bob's\\billing",composeFile:'docker-compose.yml',sources:[]},'win32')[0].command,"cd 'C:\\Bob''s\\billing'; docker compose -p billing -f docker-compose.yml ps -a");
 });
 test('Windows: listening ports from netstat, process names from tasklist',()=>{
  const netstat=`

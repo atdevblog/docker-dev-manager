@@ -11,6 +11,7 @@ const {promisify} = require('node:util');
 const A = require('./lib/analysis');
 const Advisor = require('./lib/advisor');
 const PF = require('./lib/platform');
+const BB = require('./lib/bitbucket');
 const I18N = require('./public/i18n.js');
 // API errors carry the message descriptor for the UI plus an English rendering for curl/CLI users.
 const DICTS = {vi:require('./public/locales/vi.json'),en:require('./public/locales/en.json')};
@@ -519,6 +520,126 @@ async function pickFolder() {
     return {directory,composeFiles:COMPOSE_NAMES.filter(f=>fs.existsSync(path.join(directory,f))),name};
   }catch(e){if(PF.pickCancelled(PLATFORM,e))return {cancelled:true};throw e;}
 }
+// ---- Bitbucket: Git over SSH moves to ssh.bitbucket.org (support tool) ----
+// A read-only check on click (the same as public/tools/bitbucket-ssh-check.sh), then only the fixes the
+// person reviewed, each after a backup. It reads ~/.ssh and scans the home folder (plus /var/www, /opt and
+// /srv on a server) five levels deep; DEV_MANAGER_SSH_DIR and DEV_MANAGER_SCAN_ROOTS point it elsewhere.
+const SSH_DIR=process.env.DEV_MANAGER_SSH_DIR||path.join(os.homedir(),'.ssh');
+// With a custom folder, ssh and ssh-keygen read that config and known_hosts instead of the user's own.
+const SSH_FILES=process.env.DEV_MANAGER_SSH_DIR?['-F',path.join(SSH_DIR,'config'),'-o',`UserKnownHostsFile=${path.join(SSH_DIR,'known_hosts')}`]:[];
+const KNOWN_HOSTS=path.join(SSH_DIR,'known_hosts'),SSH_CONFIG=path.join(SSH_DIR,'config');
+const SSH_HOST=/^[A-Za-z0-9][A-Za-z0-9._-]*$/; // a host name read from a repository never becomes an ssh option
+const SKIP_DIRS=new Set(['node_modules','Library','vendor','.Trash','.git','.cache','.npm','.gradle','.m2','.cargo','.rustup','.pnpm-store']);
+const SCRIPT_FILE=/(\.(sh|ya?ml)$|^Makefile$|^Dockerfile)/;
+function scanRoots(){
+  const list=process.env.DEV_MANAGER_SCAN_ROOTS?process.env.DEV_MANAGER_SCAN_ROOTS.split(path.delimiter):[os.homedir(),...(PLATFORM==='win32'?[]:['/var/www','/opt','/srv'])];
+  return [...new Set(list.filter(Boolean))].filter(d=>{try{return fs.statSync(d).isDirectory();}catch{return false;}});
+}
+// One walk: folders holding a .git directory, and scripts or CI files that may name git@bitbucket.org.
+async function scanFolders(roots){
+  const repos=new Set(),scripts=[];let visited=0;
+  async function walk(dir,depth){
+    if(++visited>200000)return;
+    let entries;try{entries=await fs.promises.readdir(dir,{withFileTypes:true});}catch{return;}
+    if(entries.some(e=>e.name==='.git'&&e.isDirectory()))repos.add(dir);
+    for(const e of entries){
+      const p=path.join(dir,e.name);
+      if(e.isDirectory()){if(depth<5&&!SKIP_DIRS.has(e.name))await walk(p,depth+1);}
+      else if(e.isFile()&&SCRIPT_FILE.test(e.name)&&e.name!=='bitbucket-ssh-check.sh')scripts.push(p);
+    }
+  }
+  for(const root of roots)await walk(root,1);
+  return {repos:[...repos].sort(),scripts};
+}
+async function sshHostname(host){
+  try{const {stdout}=await exec('ssh',[...SSH_FILES,'-G','--',host],{timeout:5000,windowsHide:true});return (stdout.match(/^hostname\s+(\S+)/m)||[])[1]||'';}catch{return '';}
+}
+async function hasHostKey(){
+  try{const {stdout}=await exec('ssh-keygen',['-F',BB.NEW_HOST,...(process.env.DEV_MANAGER_SSH_DIR?['-f',KNOWN_HOSTS]:[])],{timeout:5000,windowsHide:true});return /\S/.test(stdout.replace(/^#.*$/mg,''));}catch{return false;}
+}
+// Bitbucket's keys over HTTPS, written as ssh.bitbucket.org only when the three fingerprints match.
+async function bitbucketKeyLines(){
+  const r=await fetch('https://bitbucket.org/site/ssh',{signal:AbortSignal.timeout(10000)});
+  if(!r.ok)throw appError('error.bbKeysDownload');
+  try{return BB.knownHostLines(await r.text());}catch{throw appError('error.bbKeysMismatch');}
+}
+// Like the script: a real connection to the new hostname with each alias's own key, before or after the move.
+async function sshTest(host,knownFile){
+  const args=['-o',`HostName=${BB.NEW_HOST}`,...(knownFile?['-o',`UserKnownHostsFile=${knownFile}`]:[]),...SSH_FILES,'-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','ConnectTimeout=10','-l','git','-T','--',host];
+  try{const {stdout,stderr}=await exec('ssh',args,{timeout:20000,windowsHide:true});return BB.sshTestResult(stdout+stderr);}
+  catch(e){return BB.sshTestResult(String(e.stdout||'')+String(e.stderr||'')+String(e.message||''));}
+}
+async function crontabMentions(){
+  if(PLATFORM==='win32')return false;
+  try{return /bitbucket\.org/.test((await exec('crontab',['-l'],{timeout:5000})).stdout);}catch{return false;}
+}
+const fileMentions=f=>{try{return fs.statSync(f).size<1e6&&fs.readFileSync(f,'utf8').includes('git@bitbucket.org');}catch{return false;}};
+let lastBitbucket=null,bitbucketRunning=null;
+// connect:false skips the two Internet steps (host key download, live ssh test): the automated tests run offline.
+function bitbucketCheck({connect=true}={}){
+  bitbucketRunning??=(async()=>{
+    const roots=scanRoots(),{repos,scripts}=await scanFolders(roots),remotes=[];let https=0;
+    for(const repo of repos){
+      let text;try{text=fs.readFileSync(path.join(repo,'.git','config'),'utf8');}catch{continue;}
+      for(const r of BB.gitRemotes(text)){
+        if(BB.isHttpsBitbucket(r.url)){https++;continue;}
+        const host=BB.hostOf(r.url);if(host&&SSH_HOST.test(host))remotes.push({repo,remote:r.remote,url:r.url,host});
+      }
+    }
+    // Only SSH hosts that really lead to Bitbucket, aliases included.
+    const hosts=[];
+    for(const host of [...new Set(remotes.map(r=>r.host))].sort()){
+      const resolved=await sshHostname(host);
+      if(/(^|\.)bitbucket\.org$/i.test(resolved))hosts.push({host,resolved,verdict:BB.hostVerdict(host,resolved),remotes:remotes.filter(r=>r.host===host).map(({repo,remote,url})=>({repo,remote,url,next:BB.newRemoteUrl(url)}))});
+    }
+    const hostKey=await hasHostKey();
+    let tmp=null;
+    if(connect&&hosts.length&&!hostKey){try{const lines=await bitbucketKeyLines();tmp=path.join(os.tmpdir(),`ddm-bitbucket-${crypto.randomBytes(4).toString('hex')}`);fs.writeFileSync(tmp,lines.join('\n')+'\n',{mode:0o600});}catch{tmp=null;}}
+    try{await Promise.all(hosts.map(async h=>{h.test=connect?await sshTest(h.host,tmp):null;}));}finally{if(tmp)fs.rmSync(tmp,{force:true});}
+    const hardcoded=scripts.filter(fileMentions),crontab=await crontabMentions();
+    const fixes=(hostKey?0:1)+hosts.filter(h=>h.verdict!=='ok').length+hosts.filter(h=>h.test&&h.test!=='ok').length;
+    return lastBitbucket={checkedAt:new Date().toISOString(),newHost:BB.NEW_HOST,deadline:BB.DEADLINE,roots,repos:repos.length,https,hostKey,keyFile:KNOWN_HOSTS,configFile:SSH_CONFIG,hosts,hardcoded,crontab,fixes,ready:fixes===0};
+  })().finally(()=>{bitbucketRunning=null;});
+  return bitbucketRunning;
+}
+const backupName=f=>{const d=new Date(),p=n=>String(n).padStart(2,'0');return `${f}.bak-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;};
+// A file behind a symlink (dotfile managers) is edited in place, keeping the link.
+const realFile=f=>{try{return fs.realpathSync(f);}catch{return f;}};
+// Each fix answers with what it would change ({apply:false}) or does it after a backup ({apply:true}).
+async function bitbucketFix(b){
+  if(b.action==='hostKey'){
+    const lines=await bitbucketKeyLines(),file=realFile(KNOWN_HOSTS),exists=fs.existsSync(file);
+    const plan={action:'hostKey',file:KNOWN_HOSTS,backup:exists?backupName(KNOWN_HOSTS):'',keys:lines.map(l=>{const [,type,key]=l.split(' ');return {type,fingerprint:BB.fingerprint(key)};})};
+    if(!b.apply)return plan;
+    if(await hasHostKey())return {...plan,done:true,skipped:true};
+    fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700});
+    if(exists)fs.copyFileSync(file,plan.backup=backupName(file));
+    const before=exists?fs.readFileSync(file,'utf8'):'';
+    fs.appendFileSync(file,(before&&!before.endsWith('\n')?'\n':'')+lines.join('\n')+'\n',{mode:0o600});
+    return {...plan,done:true};
+  }
+  if(b.action==='sshConfig'){
+    const file=realFile(SSH_CONFIG);let text;try{text=fs.readFileSync(file,'utf8');}catch{throw appError('error.bbNoConfig',{path:SSH_CONFIG});}
+    const {text:next,changes}=BB.rewriteSshConfig(text),plan={action:'sshConfig',file:SSH_CONFIG,backup:backupName(SSH_CONFIG),changes};
+    if(!b.apply||!changes.length)return plan;
+    fs.copyFileSync(file,plan.backup=backupName(file));
+    const tmp=`${file}.${process.pid}.tmp`;fs.writeFileSync(tmp,next,{mode:fs.statSync(file).mode&0o777});fs.renameSync(tmp,file);
+    return {...plan,done:true};
+  }
+  if(b.action==='remotes'){
+    // Only remotes the last check listed as pointing straight at bitbucket.org can be changed.
+    const direct=(lastBitbucket?.hosts||[]).filter(h=>h.verdict==='direct').flatMap(h=>h.remotes);
+    const items=direct.filter(r=>r.next!==r.url),plan={action:'remotes',items:items.map(({repo,remote,url,next})=>({repo,remote,url,next}))};
+    if(!b.apply)return plan;
+    const results=[];
+    for(const r of items){
+      try{fs.copyFileSync(path.join(r.repo,'.git','config'),backupName(path.join(r.repo,'.git','config')));await exec('git',['-C',r.repo,'remote','set-url','--',r.remote,r.next],{timeout:10000,windowsHide:true});results.push({...r,ok:true});}
+      catch(e){results.push({...r,ok:false,error:dockerError(e)});}
+    }
+    return {...plan,items:results,done:true};
+  }
+  throw appError('error.bbAction');
+}
 // A project action and an action on one of its containers never run at the same time.
 const projectBusy=name=>operations.has(name)||[...operations].some(k=>k.startsWith(name+'/'));
 async function planFor(action,names) {
@@ -590,8 +711,8 @@ function authorization(req) {
   }
   return true;
 }
-const mime={'.woff2':'font/woff2','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.json':'application/json; charset=utf-8','.png':'image/png','.ico':'image/x-icon'};
-const STATIC_FILES=['index.html','app.js','style.css','i18n.js','locales/vi.json','locales/en.json','logo.svg','favicon.svg','favicon.ico','apple-touch-icon.png',
+const mime={'.sh':'text/plain; charset=utf-8','.woff2':'font/woff2','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.json':'application/json; charset=utf-8','.png':'image/png','.ico':'image/x-icon'};
+const STATIC_FILES=['index.html','app.js','style.css','i18n.js','locales/vi.json','locales/en.json','tools/bitbucket-ssh-check.sh','logo.svg','favicon.svg','favicon.ico','apple-touch-icon.png',
   'fonts/be-vietnam-pro-400-vietnamese.woff2','fonts/be-vietnam-pro-400-latin-ext.woff2','fonts/be-vietnam-pro-400-latin.woff2','fonts/be-vietnam-pro-500-vietnamese.woff2','fonts/be-vietnam-pro-500-latin-ext.woff2','fonts/be-vietnam-pro-500-latin.woff2','fonts/be-vietnam-pro-600-vietnamese.woff2','fonts/be-vietnam-pro-600-latin-ext.woff2','fonts/be-vietnam-pro-600-latin.woff2','fonts/be-vietnam-pro-700-vietnamese.woff2','fonts/be-vietnam-pro-700-latin-ext.woff2','fonts/be-vietnam-pro-700-latin.woff2'];
 function staticFile(req,res,urlPath){
   const target=urlPath==='/'?'index.html':urlPath.slice(1);
@@ -614,6 +735,12 @@ async function route(req,res){
   if (pathname==='/api/advisor' && req.method==='GET'){
     const asked=new Set((url.searchParams.get('parts')||'health').split(',').filter(x=>['health','stats','disk'].includes(x)));
     try{return respond(res,200,await advisorView(asked));}catch(e){return fail(res,503,dockerError(e));}
+  }
+  if (pathname==='/api/bitbucket' && req.method==='GET')return respond(res,200,{check:lastBitbucket,deadline:BB.DEADLINE,newHost:BB.NEW_HOST});
+  if (pathname==='/api/bitbucket/check' && req.method==='POST'){const b=await readBody(req).catch(()=>({}));return respond(res,200,{check:await bitbucketCheck({connect:b?.connect!==false})});}
+  if (pathname==='/api/bitbucket/fix' && req.method==='POST'){
+    let b;try{b=await readBody(req);}catch(e){return fail(res,400,why(e));}
+    try{return respond(res,200,{result:await bitbucketFix(b||{})});}catch(e){return fail(res,e.msg?400:500,e.msg||dockerError(e));}
   }
   if (pathname==='/api/network-check' && req.method==='GET')return respond(res,200,{check:lastNetCheck});
   if (pathname==='/api/network-check' && req.method==='POST')return respond(res,200,{check:await runNetworkCheck()});

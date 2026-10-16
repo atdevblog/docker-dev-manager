@@ -57,6 +57,8 @@ Cần port khác? Chạy `DEV_MANAGER_PORT=4174 npm start` (PowerShell: `$env:DE
 |---|---|---|
 | `DEV_MANAGER_PORT` | `4173` | Port của dashboard (luôn chỉ bind `127.0.0.1`) |
 | `DEV_MANAGER_CONFIG_DIR` | `~/.config/docker-dev-manager` | Nơi lưu cài đặt và kết quả đo gần nhất |
+| `DEV_MANAGER_SCAN_ROOTS` | thư mục cá nhân (cùng `/var/www`, `/opt`, `/srv` nếu có) | Các thư mục mà phần kiểm tra Bitbucket quét tìm repo, cách nhau bằng `:` (`;` trên Windows) |
+| `DEV_MANAGER_SSH_DIR` | `~/.ssh` | Thư mục SSH mà phần kiểm tra Bitbucket đọc và sửa |
 | `DEV_MANAGER_IDLE_MINUTES` | `15` | Khoảng cách tối thiểu giữa hai lần đo RAM/CPU để một dự án im lặng (không traffic mạng, CPU < 1%) được coi là nhàn rỗi |
 
 </details>
@@ -71,7 +73,7 @@ Cần port khác? Chạy `DEV_MANAGER_PORT=4174 npm start` (PowerShell: `$env:DE
 | [Tổng quan màn hình](docs/guide.vi.md#2-tổng-quan-màn-hình) | [Điều khiển từng container](docs/guide.vi.md#điều-khiển-từng-container) | [Giải phóng bộ nhớ](docs/guide.vi.md#8-giải-phóng-bộ-nhớ) |
 | [Import dự án, Up và Down](docs/guide.vi.md#11-import-dự-án-up-và-down) | [Vì sao dự án không chạy?](docs/guide.vi.md#5-vì-sao-dự-án-không-chạy) | [Chọn port trống](docs/guide.vi.md#9-chọn-port-trống) |
 | [Ngôn ngữ](docs/guide.vi.md#12-ngôn-ngữ) | [Xem nhật ký](docs/guide.vi.md#6-xem-nhật-ký) | [Dọn ổ đĩa an toàn](docs/guide.vi.md#10-dọn-ổ-đĩa-an-toàn) |
-| [Câu hỏi và sự cố thường gặp](docs/guide.vi.md#13-câu-hỏi-và-sự-cố-thường-gặp) | [Nhóm từ Docker](docs/guide.vi.md#7-nhóm-từ-docker) | |
+| [Câu hỏi và sự cố thường gặp](docs/guide.vi.md#13-câu-hỏi-và-sự-cố-thường-gặp) | [Nhóm từ Docker](docs/guide.vi.md#7-nhóm-từ-docker) | [Bitbucket: chuyển Git qua SSH](docs/guide.vi.md#14-bitbucket-chuyển-git-qua-ssh-sang-sshbitbucketorg) |
 
 ## Bên trong có gì
 
@@ -83,6 +85,7 @@ Cần port khác? Chạy `DEV_MANAGER_PORT=4174 npm start` (PowerShell: `$env:DE
 | 🧠 **Giải phóng bộ nhớ** | Dự án xếp theo RAM so với giới hạn của Docker VM, phát hiện dự án nhàn rỗi qua hai lần đo, và luôn có bước xem lại những gì sẽ bị ảnh hưởng trước khi dừng. |
 | 💾 **Dọn ổ đĩa** | Dung lượng Docker đang dùng, chia thành *dọn an toàn*, *cần xem lại* và *có thể chứa dữ liệu*, kèm lệnh để sao chép. Dashboard không bao giờ tự xóa gì. |
 | 🎛️ **Điều khiển ở mọi cấp** | Khởi động, dừng, khởi động lại cả dự án, cả nhóm dự án dùng chung network (đúng thứ tự phụ thuộc) hoặc từng container, giống Docker Desktop. Mở shell vào bên trong container, hoặc Terminal ngay tại thư mục của nó. |
+| 🔑 **Chuyển SSH Bitbucket** | Từ 12/11/2026, Bitbucket chỉ nhận Git qua SSH ở `ssh.bitbucket.org`. Một lần kiểm tra tìm mọi repo và alias trong `~/.ssh` còn dùng `bitbucket.org`, thử key của bạn với host mới; sau đó thêm host key, sửa alias và remote, mỗi thay đổi đều được xem trước và sao lưu. Có kèm script để kiểm tra tương tự trên máy chủ. |
 | 🩺 **Tư vấn sức khỏe** | Điểm sức khỏe chỉ gồm các khoản trừ có giải thích, cùng danh sách việc cần làm xếp từ **Khẩn cấp → Tối ưu**, mỗi việc ghi rõ giải phóng bao nhiêu RAM hay ổ đĩa và mức rủi ro. |
 
 ## Làm ra để dùng mỗi ngày
@@ -97,7 +100,7 @@ Công cụ bổ trợ cho Docker Desktop chứ không thay thế nó.
 
 ## Bảo mật
 
-Đây là **công cụ cục bộ cho một người dùng**. Nó chỉ lắng nghe ở `127.0.0.1`, từ chối request có `Host` không phải `localhost`, và yêu cầu token theo phiên cùng `Origin` localhost cho mọi thay đổi. Lệnh chạy bằng quyền Docker của chính bạn. Kết nối duy nhất ra Internet là nút kiểm tra mạng ở sidebar, và chỉ khi bạn bấm: nó mở rồi đóng một kết nối tới `registry-1.docker.io` và `1.1.1.1` để đo thời gian; không gửi hay tải dữ liệu nào. Không mở công cụ ra mạng hay qua tunnel.
+Đây là **công cụ cục bộ cho một người dùng**. Nó chỉ lắng nghe ở `127.0.0.1`, từ chối request có `Host` không phải `localhost`, và yêu cầu token theo phiên cùng `Origin` localhost cho mọi thay đổi. Lệnh chạy bằng quyền Docker của chính bạn. App chỉ kết nối ra Internet khi bạn bấm: nút kiểm tra mạng mở rồi đóng một kết nối tới `registry-1.docker.io` và `1.1.1.1` để đo thời gian (không gửi hay tải dữ liệu nào), còn phần kiểm tra Bitbucket tải host key công khai của Bitbucket từ `bitbucket.org` qua HTTPS và thử đăng nhập SSH tới `ssh.bitbucket.org` bằng chính key của bạn. Không mở công cụ ra mạng hay qua tunnel.
 
 <details>
 <summary>Tùy chọn: mở bằng tên miền cục bộ qua reverse proxy</summary>
@@ -145,6 +148,7 @@ File được ghi atomic với quyền `0600`, giữ nguyên các key khác. Fil
 server.js            HTTP server, gọi Docker CLI, kiểm tra trước, tác vụ nền, lưu kết quả đo
 lib/analysis.js      luật thuần: gom nhóm, vấn đề, phụ thuộc, port, tài nguyên, ổ đĩa, kiểm tra trước cho container
 lib/advisor.js       điểm sức khỏe, lãng phí và khuyến nghị xếp theo thứ tự
+lib/bitbucket.js     chuyển SSH Bitbucket: URL remote, ~/.ssh/config, fingerprint host key
 lib/platform.js      phần khác nhau theo hệ điều hành: terminal, hộp chọn thư mục, Finder/File Explorer, đường dẫn, lệnh sao chép
 public/              trang web (index.html, app.js, style.css), i18n.js, locales/, icon, fonts/
 assets/icons/        file nguồn icon; build.sh tạo lại favicon.ico và apple-touch-icon.png

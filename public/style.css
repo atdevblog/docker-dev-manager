@@ -110,6 +110,24 @@ html.i18n-pending body{visibility:hidden;animation:i18n-reveal 0s 1.5s forwards}
 .sysbox small{font-size:11.5px;color:var(--muted)}.sysbox small.textwarning{color:var(--warn-fg)}.sysbox small.textdanger{color:var(--bad-fg)}
 .netvals{display:flex;justify-content:space-between;gap:8px;white-space:nowrap;font-variant-numeric:tabular-nums}.netvals b{font-weight:600;color:var(--text)}
 .sysbox+.sidebottom{margin-top:0}
+/* Bitbucket SSH: numbered steps like the runbook, a verdict on top, every change previewed */
+.bbsteps{display:flex;flex-direction:column;gap:14px;margin-bottom:14px}
+.bbstep{padding:16px 18px}.bbstep h3{margin:0;font-size:15px}.bbstep>p{margin:10px 0 0}.bbstep>.btn,.bbactions{margin-top:12px}
+.bbstephead{display:flex;align-items:center;gap:10px}.bbstephead .bbstate{margin-left:auto}
+.bbnum{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:700;flex-shrink:0}
+.bbstate{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;background:var(--neutral-bg);color:var(--neutral-fg);white-space:nowrap}.bbstate i{font-style:normal;font-size:9px}
+.bbstate.ok{background:var(--ok-bg);color:var(--ok-fg)}.bbstate.fix{background:var(--bad-bg);color:var(--bad-fg)}.bbstate.info{background:var(--warn-bg);color:var(--warn-fg)}
+.bbsummary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;border-radius:var(--radius);border:1px solid var(--line)}.bbsummary .ic{width:20px;height:20px}
+.bbsummary.ok{background:var(--ok-bg);border-color:var(--ok-line);color:var(--ok-fg)}.bbsummary.fix{background:var(--bad-bg);border-color:var(--bad-line);color:var(--bad-fg)}.bbsummary .smalltext{margin-left:auto}
+.bbstep .tablewrap{margin-top:12px;box-shadow:none}.bbstep td.mono,.bbtests .mono,.bbfiles .mono{font-family:var(--mono);font-size:12.5px}
+.bbrepos summary{cursor:pointer;color:var(--sub)}.bbrepos ul{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}.bbrepos li{display:flex;flex-direction:column;font-size:12.5px}.bbrepos code{font-size:11.5px;color:var(--sub);overflow-wrap:anywhere}
+.bbactions{display:flex;gap:8px;flex-wrap:wrap}
+.bbintro{margin:10px 0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.bbtests,.bbfiles{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}.bbtests li{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.bbserver{display:flex;align-items:center;gap:14px;padding:14px 18px}.bbserver>.ic{width:22px;height:22px;color:var(--muted);flex-shrink:0}.bbserver div{flex:1;min-width:0}.bbserver p{margin:2px 0 0;font-size:13px;color:var(--sub)}
+.bbreview{display:flex;flex-direction:column;gap:10px;margin:6px 0 4px}.bbreview table{width:100%;font-family:var(--mono);font-size:12px}.bbreview td{padding:4px 8px 4px 0;overflow-wrap:anywhere}
+.bbdiff{display:flex;flex-direction:column;gap:3px}.bbdiff code{font-family:var(--mono);font-size:12px;padding:3px 8px;border-radius:6px;overflow-wrap:anywhere}
+.bbdiff .del{background:var(--bad-bg);color:var(--bad-fg)}.bbdiff .del::before{content:'− '}.bbdiff .add{background:var(--ok-bg);color:var(--ok-fg)}.bbdiff .add::before{content:'+ '}
 .netrating{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600}.netrating i{font-style:normal;font-size:8px}
 .netrating.lvl-fast{color:var(--ok-fg)}.netrating.lvl-ok{color:var(--text)}.netrating.lvl-slow{color:var(--warn-fg)}.netrating.lvl-offline{color:var(--bad-fg)}
 .sysbox .btn.netcheck{align-self:flex-start;padding:0;min-height:0;font-size:11.5px}
@@ -394,7 +412,7 @@ dialog.drawer{margin:0 0 0 auto;height:100vh;max-height:100vh;width:min(1000px,9
 .formerror{margin:14px 0 0;padding:9px 12px;border-radius:var(--radius-sm);background:var(--bad-bg);border-left:3px solid var(--bad-line);color:var(--bad-fg);font-size:13px;line-height:1.45}
 .dialogInner [aria-invalid=true]{border-color:var(--bad-line)}
 .charcount{display:block;text-align:right;font-size:12px;font-weight:400;color:var(--sub);margin-top:3px;min-height:16px}
-.dialogActions{justify-content:flex-end;margin-top:20px}
+.dialogActions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:20px}
 .detailactions{border-top:0;padding-top:0;margin:8px 0 6px}
 .detailhead{margin:18px 0 8px;font-size:14px;color:var(--text)}
 .detailrow{display:grid;grid-template-columns:150px 1fr;gap:12px;border-bottom:1px solid var(--line);padding:9px 0;font-size:13px;overflow-wrap:anywhere}

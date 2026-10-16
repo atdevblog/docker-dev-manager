@@ -70,25 +70,25 @@ function raw(o){
 }
 // Collects every message the server can build for these fixtures: issues, hints, notes, labels, preflight.
 async function serverMessages(){
- const fixtures=[{name:'mariadb',project:'fleet',networks:['fleet'],ports:{'3306/tcp':[{HostIp:'127.0.0.1',HostPort:'3306'}]}},
-  {name:'api',project:'erp',networks:['fleet'],restarts:9},{name:'db',project:'erp',state:'exited',exit:255},{name:'clam',project:'erp',oom:true,mem:268435456},{name:'fresh',project:'erp',state:'exited',oom:true,policy:'unless-stopped'},
-  {name:'web',project:'erp',health:'unhealthy'},{name:'proxy',project:'erp',state:'exited',error:'port is already allocated',policy:'unless-stopped'},{name:'loop',project:'erp',state:'restarting',exit:3},{name:'gone',project:'erp',state:'dead'},
-  {name:'job',project:'erp',state:'exited',exit:2},{name:'sig',project:'erp',state:'exited',exit:139},{name:'odd',project:'erp',state:'exited',exit:42},
-  {name:'shopdb',project:'shop',state:'exited',dir:'/w/shop',networks:['fleet','vanished'],ports:{'3306/tcp':[{HostIp:'',HostPort:'3306'}]},binds:[path.join(os.homedir(),'ddm-i18n-missing-dir')]},
+ const fixtures=[{name:'mariadb',project:'stack',networks:['stack'],ports:{'3306/tcp':[{HostIp:'127.0.0.1',HostPort:'3306'}]}},
+  {name:'api',project:'billing',networks:['stack'],restarts:9},{name:'db',project:'billing',state:'exited',exit:255},{name:'clam',project:'billing',oom:true,mem:268435456},{name:'fresh',project:'billing',state:'exited',oom:true,policy:'unless-stopped'},
+  {name:'web',project:'billing',health:'unhealthy'},{name:'proxy',project:'billing',state:'exited',error:'port is already allocated',policy:'unless-stopped'},{name:'loop',project:'billing',state:'restarting',exit:3},{name:'gone',project:'billing',state:'dead'},
+  {name:'job',project:'billing',state:'exited',exit:2},{name:'sig',project:'billing',state:'exited',exit:139},{name:'odd',project:'billing',state:'exited',exit:42},
+  {name:'shopdb',project:'shop',state:'exited',dir:'/w/shop',networks:['stack','vanished'],ports:{'3306/tcp':[{HostIp:'',HostPort:'3306'}]},binds:[path.join(os.homedir(),'ddm-i18n-missing-dir')]},
   {name:'shopq',project:'shop',state:'exited',dir:'/w/shop-worktree',files:'/w/shop/a.yml,/w/shop/b.yml'},
   {name:'multi',project:'multi',files:'/w/multi/a.yml,/w/multi/b.yml'},{name:'loose',ports:{'80/tcp':[{HostIp:'',HostPort:'8080'}]}}];
- const rawList=fixtures.map(raw),containers=rawList.map(A.normalizeContainer),networks=new Map([['fleet','fleet']]);
+ const rawList=fixtures.map(raw),containers=rawList.map(A.normalizeContainer),networks=new Map([['stack','stack']]);
  const projects=S.mergeManaged(S.discoverFromInspect(rawList,[],networks),[{name:'old',directory:'/w/old',composeFile:'compose.yaml'}]);
  const by=n=>projects.find(p=>p.name===n),out=[];
  for(const p of projects){out.push(p.reason);for(const i of p.issues)out.push(i.text,i.hint);for(const c of p.commands)out.push(c.label);}
- out.push(...A.cliCommands({...by('fleet'),managed:true,directory:'/w/fleet',composeFile:'compose.yaml'}).map(c=>c.label));
- for(const r of A.resourceView(projects,[],['fleet']).projects)out.push(...r.notes);
+ out.push(...A.cliCommands({...by('stack'),managed:true,directory:'/w/stack',composeFile:'compose.yaml'}).map(c=>c.label));
+ for(const r of A.resourceView(projects,[],['stack']).projects)out.push(...r.notes);
  const disk=A.diskReport({BuildCache:[{InUse:'false',Shared:'false',Size:'1GB',LastUsedAt:'2020-01-01 00:00:00 +0000 UTC'}],Images:[],Containers:[],Volumes:[]});
  for(const r of disk.rows)out.push(r.label,r.note,...r.commands.map(c=>c.label));
  const inv=A.portInventory(containers,[{pid:1,command:'ControlCenter',ip:'0.0.0.0',port:8080},{pid:2,command:'node',ip:'127.0.0.1',port:4173}],2);for(const e of inv)out.push(e.note);
- const ctx={containers,networks,selected:new Set(),keepRunning:['fleet']};
+ const ctx={containers,networks,selected:new Set(),keepRunning:['stack']};
  const managedEmpty={...by('old'),composeFileOk:true};
- const plans=[['start',by('shop')],['start',by('erp')],['stop',by('fleet')],['down',{...by('fleet'),managed:true}],['up',by('erp')],['up',{...by('old'),composeFileOk:false}],
+ const plans=[['start',by('shop')],['start',by('billing')],['stop',by('stack')],['down',{...by('stack'),managed:true}],['up',by('billing')],['up',{...by('old'),composeFileOk:false}],
   ['start',managedEmpty],['start',by('multi')],['restart',by('multi')],['stop',by('shop')],['start',undefined]];
  for(const [action,p] of plans){const item=await S.planItem(action,p,ctx);out.push(...item.errors,...item.warnings,item.info);}
  // Advisor: offline engine, then a busy machine with every kind of finding, idle projects, pressure and disk waste.
@@ -98,13 +98,13 @@ async function serverMessages(){
   Containers:[{State:'exited',Size:'200MB'}],Volumes:[{Name:'v',Links:'0',Size:'3GB',Labels:''}]});
  const act=idle=>new Map(projects.map(p=>[p.name,{known:p.name!=='multi',idle:idle.includes(p.name),observedMinutes:20}]));
  for(const r of [V.advise({docker:{available:false,error:'Cannot connect'}}),
-   V.advise({docker:{available:true},projects,containers:live,vm:{memTotal:1e9},host:{memory:{pressure:'critical'}},keepRunning:['fleet'],portEntries:inv,disk:bigDisk,activity:act(['erp'])}),
-   V.advise({docker:{available:true},projects,containers:live,vm:{memTotal:1e12},keepRunning:[],portEntries:inv,disk:bigDisk,activity:act(['erp','fleet'])})]){
+   V.advise({docker:{available:true},projects,containers:live,vm:{memTotal:1e9},host:{memory:{pressure:'critical'}},keepRunning:['stack'],portEntries:inv,disk:bigDisk,activity:act(['billing'])}),
+   V.advise({docker:{available:true},projects,containers:live,vm:{memTotal:1e12},keepRunning:[],portEntries:inv,disk:bigDisk,activity:act(['billing','stack'])})]){
   for(const f of r.health.findings)out.push(f.text,f.fix,f.detail);
   for(const a of r.actions)out.push(a.title,...(a.why||[]),a.riskText);
   for(const w of r.waste)out.push(w.text);for(const k of r.keep)out.push(k.reason);
  }
- out.push(A.msg('error.preflight',{details:[A.msg('preflight.noContainers')]}),A.msg('error.action',{actions:['start','stop']}),A.msg('error.needsImport',{action:'up'}),A.msg('error.confirm',{phrase:'down erp'}));
+ out.push(A.msg('error.preflight',{details:[A.msg('preflight.noContainers')]}),A.msg('error.action',{actions:['start','stop']}),A.msg('error.needsImport',{action:'up'}),A.msg('error.confirm',{phrase:'down billing'}));
  // Plain strings are Docker's own text (e.g. State.Error) and must pass through unchanged.
  return out.filter(Boolean);
 }
@@ -118,5 +118,5 @@ test('every server-built message renders in both languages with no raw keys or u
  }
  // Technical names travel untouched through translation.
  const viText=I18N.create(DICTS,'vi').render(messages);
- for(const name of ['mariadb','fleet','shopdb','vanished','3306','port is already allocated'])assert.ok(viText.includes(name),name);
+ for(const name of ['mariadb','stack','shopdb','vanished','3306','port is already allocated'])assert.ok(viText.includes(name),name);
 });
